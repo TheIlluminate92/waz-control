@@ -1,0 +1,20 @@
+Menu="Buttons:98"
+Link="nav-user"
+---
+<?php
+$pluginRoot = '/usr/local/emhttp/plugins/waz.health';
+$webRoot = '/plugins/waz.health';
+$cssFile = $pluginRoot . '/assets/css/banner.css';
+$jsFile = $pluginRoot . '/assets/js/banner.js';
+
+$cssVersion = is_file($cssFile) ? filemtime($cssFile) : 0;
+$jsVersion = is_file($jsFile) ? filemtime($jsFile) : 0;
+?>
+<link rel="stylesheet" href="<?=$webRoot?>/assets/css/banner.css?v=<?=$cssVersion?>">
+<script>
+window.WAZHealthBootstrap = <?=json_encode([
+    'endpoint' => $webRoot . '/include/status.php',
+    'refreshMs' => 5000,
+], JSON_UNESCAPED_SLASHES)?>;
+</script>
+<script defer src="<?=$webRoot?>/assets/js/banner.js?v=<?=$jsVersion?>"></script>

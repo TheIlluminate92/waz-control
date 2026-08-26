@@ -1,118 +1,39 @@
 # Dependencies
 
-This file tracks what WAZ Control actually depends on as development progresses.
-
 ## Baseline
 
-Currently developed against:
+- Unraid 7.2+ on x86-64; tested on Unraid 7.3.2
+- Unraid WebUI/emhttp plugin system
+- Docker enabled for the Workloads panel
+- A modern browser with JavaScript enabled
+- Terminal or SSH access for installation and recovery
 
-- Unraid 7.3.x on x86-64
-- Unraid WebUI / emhttp plugin system
-- a modern browser with JavaScript enabled
-- shell access for installation and recovery
+## Optional integrations
 
-The current WAZ Health plugin declares `min="6.12.0"`, but development/testing is being done on Unraid 7.3.x. Do not interpret the declaration as a compatibility guarantee for every 6.12+ release.
+- **FolderView Plus:** Docker folders, colors, icons, order, and membership
+- **Unraid Docker Organizer:** native folder fallback
+- **Disk Location:** R360/MD1200-style physical slot assignments and empty bays
+- **HBA Viewer:** cached controller temperatures and identity information
+- **apcupsd or NUT:** UPS state, charge, runtime, and load
+- **intel_gpu_top:** Intel GPU engine load and client attribution
+- **lm-sensors/Linux hwmon:** CPU and cooling telemetry
 
-## WAZ Health v0.3.0 / plugin build 2026.08.25.004
+Missing optional integrations generally produce unavailable metrics rather than an installation failure, but layouts are tuned for the reference server.
 
-The uploaded rolling build was reviewed directly. It does **not** depend on Home Assistant, Unraid API, NPM Switches, Netdata, HBAWear, or Docker for its current health banner.
+## Runtime sources
 
-### Required host interfaces
+The collectors read Unraid/Linux runtime state including:
 
-WAZ Health currently reads directly from standard Linux/Unraid runtime sources:
+- `/proc/uptime`, `/proc/meminfo`, `/proc/stat`, and process/cgroup data
+- `/var/local/emhttp/var.ini` and `/var/local/emhttp/disks.ini`
+- `/boot/config/pools/*.cfg` and the generated parity schedule
+- `/sys/class/hwmon`, CPU topology, thermal-throttle counters, network statistics, and RAPL power
+- Docker's local socket through Unraid's Docker client
 
-- `/proc/uptime` for server uptime
-- `/var/local/emhttp/var.ini` for array state, missing/disabled/invalid disks, and parity error count
-- `/var/local/emhttp/disks.ini` for disk/pool capacity usage
-- `/sys/class/hwmon/` for CPU and supported cooling sensor telemetry
-- `/sys/devices/system/cpu/cpu0/thermal_throttle/` for thermal-throttle counters when exposed
+These paths and formats can change between Unraid releases.
 
-It installs runtime files under:
+## Reference hardware assumptions
 
-- `/usr/local/emhttp/plugins/waz.health/`
+The current layout and collectors were tested with a Dell PowerEdge R360, Intel Xeon E-2488, Intel Arc Pro A40, Dell HBA355i, SAS9300-8e, bonded networking, Aqua Computer high flow NEXT, multiple SSD pools, and an XFS array connected through MD1200 shelves.
 
-and persistent configuration under:
-
-- `/boot/config/plugins/waz.health/`
-
-### Cooling sensor assumptions
-
-CPU temperature detection currently expects Linux `coretemp` hwmon data and looks for labels such as `Package id 0` or `CPU Temp`.
-
-The custom liquid-cooling collector currently expects an hwmon device named:
-
-- `highflownext`
-
-with labels:
-
-- `Coolant temp`
-- `Flow [dL/h]`
-
-The plugin converts the flow input from dL/h to L/h. Systems without these exact hwmon names/labels will simply lack those coolant/flow metrics unless the collector is adapted.
-
-This is one of the major reasons the repository is explicitly **not stock-compatible**.
-
-### UPS support
-
-UPS health is optional at runtime. The plugin auto-detects either:
-
-- NUT via `upsc`, or
-- apcupsd via `apcaccess`
-
-If neither command exists, UPS metrics are reported as unavailable rather than causing the plugin to fail.
-
-### Browser/WebUI behavior
-
-The banner is injected through `WazHealthBanner.page`, with local CSS and JavaScript served from the plugin directory. It refreshes the health JSON endpoint every five seconds and updates browser-local time once per minute.
-
-The banner expects common Unraid WebUI elements such as `#menu` and `#displaybox`; changes to Unraid's DOM can therefore break placement or sticky behavior.
-
-## Current configurable thresholds
-
-The rolling build creates `/boot/config/plugins/waz.health/waz.health.cfg` on first install. Current defaults are:
-
-- storage warning: 95%
-- storage fault: 98%
-- CPU warning: 60°C
-- CPU fault: 70°C
-- coolant warning: 35°C
-- coolant fault: 40°C
-- flow warning: 130 L/h
-- flow fault: 120 L/h
-- throttle latch: 300 seconds
-- UPS load warning: 90%
-- UPS load fault: 100%
-
-These defaults are specific to the reference setup and should be reviewed before using the project elsewhere.
-
-## Planned optional integrations
-
-Later WAZ Control modules may use or integrate with:
-
-- HBAWear
-- Unraid API
-- Netdata
-- NPM Switches
-- Intel GPU telemetry
-
-Those are **not current WAZ Health requirements**.
-
-## Reference hardware
-
-The maintainer's test system includes:
-
-- Dell PowerEdge R360
-- Intel Xeon E-2488
-- 128 GB DDR5 ECC
-- Intel Arc Pro A40
-- Dell HBA355i
-- LSI/Broadcom 9300-8e
-- bonded dual 1 GbE networking
-- Aqua Computer high flow NEXT cooling telemetry
-- multiple SSD pools and a large XFS array
-
-Other hardware may require changes.
-
-## Rule for users/contributors
-
-Do not assume sensor paths, sensor labels, network names, GPU names, CPU topology, disk counts, controller addresses, or third-party plugins match the reference system. Every new dependency should be documented here when it is actually introduced.
+Other CPUs, GPUs, HBAs, sensor labels, network interfaces, disk counts, and physical layouts may require changes.

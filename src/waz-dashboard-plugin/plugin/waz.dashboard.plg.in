@@ -1,0 +1,207 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name "waz.dashboard">
+  <!ENTITY author "WAZ">
+  <!ENTITY version "@@RELEASE_VERSION@@">
+]>
+
+<PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="file:///boot/config/plugins/waz.dashboard.plg" min="7.2.0" icon="fa-tachometer">
+<CHANGES>
+### &version; - WAZ System v@@APP_VERSION@@
+
+- Integrates the sticky WAZ Health banner, live collectors, thresholds, local time, and uptime into the dashboard plugin.
+- Matches the banner to the System, Workloads, and Storage dark palette.
+- Migrates standalone WAZ Health settings and recoverably disables its old plugin manifest to prevent duplicate loaders.
+- Imports live Docker groups from FolderView Plus and Unraid's native Docker Organizer, with existing FolderView formats retained as fallbacks.
+- Adds compact Workloads and Storage attention rows that identify the exact container, parity, pool, array, disk, temperature, capacity, or telemetry problem.
+- Adds a SERVER STATUS header to the left panel and moves its LIVE indicator from the footer to the header.
+- Removes redundant physical-location labels from Array rows because the Disk Location section already maps every disk.
+- Moves Docker-vdisk used/total capacity into the Workloads summary.
+- Removes the redundant Docker-vdisk row from the left System memory section and its snapshot payload.
+- Replaces the Health summary with Issues: unhealthy containers plus stopped containers whose last exit code was non-zero.
+- Builds folders from supported Docker folder labels when no FolderView configuration file exists.
+- Removes the redundant selected-container process list while retaining the permanent Top 4 host-process table.
+- Removes all secondary text from the four Workloads summary cells.
+- Clarifies Health as passing Docker HEALTHCHECK results versus containers that define a health check.
+- Imports Docker folders from FolderView3 and compatible FolderView/FolderView2 configurations, including BOM-prefixed JSON.
+- Adds the full-height Workloads center panel with FolderView3-aware Docker folders and remembered selection.
+- Opens Unraid's native Docker controls from each container icon while loading selected-container telemetry below.
+- Adds selected-container CPU, RAM, network, disk I/O, pool access, GPU attribution, status, sparklines, and mini process details.
+- Adds a permanent live Top 4 host-process table with Docker attribution immediately above the selected-container inspector.
+- Removes the redundant native System and Docker dashboard tiles without modifying Unraid core files.
+- Displays storage capacities using decimal KB/MB/GB/TB units.
+- Keeps every normal pool-button border blue while restoring each pool's identity color to its percentage value and top bar.
+- Labels the parity devices Parity 1 and Parity 2 and replaces duplicate validity text with last- and next-check timing.
+- Calculates the next parity check from Unraid's generated schedule and custom week-of-month setting.
+- Restyles normal pool cards with cool-blue borders and values while retaining identity colors only in their top bars.
+- Preserves Disk Location geometry while renumbering only usable bays: R360 1-8 and each MD1200 1-12.
+- Enlarges Array rows and lets them consume the remaining matched panel height.
+- Adds the WAZ Storage right-column panel with compact parity status, remembered pool selectors, live pool members, three physical shelf maps, empty bays, and a permanent dynamic two-column Array table.
+- Uses Unraid's cached disk telemetry and Disk Location's saved assignments without waking sleeping drives.
+- Synchronizes the Storage panel height to the System panel.
+- Displays network download and upload side by side with equal width and distinct colors.
+- Adds live RAM, log-filesystem, and Docker-vdisk usage bars to the Memory section.
+- Reorders the 3x3 status board into CPU/GPU/Power, RAM/Coolant/HBA 0, and Network/Flow/HBA 1 rows.
+- Removes the redundant standalone GPU detail section.
+- Keeps GPU load, active process names, and video load in the top status board.
+- Increases status, section, core, legend, detail, and footer text sizes.
+- Renames Server Power to Rack Power and calculates it from UPS load and nominal output.
+- Expands the top status board to a 3x3 system summary.
+- Adds coolant flow as its own status tile.
+- Adds both HBA temperatures through HBA Viewer's shared cached export API.
+- Slightly increases status and section label sizes.
+- Consolidates CPU, cooling, and power into the top status board.
+- Removes the redundant WAZ System heading, allocation drawer, and thermal strip.
+- Removes duplicate headline values from the detail sections for a one-screen layout.
+- Increases the entire panel to a readable dashboard scale.
+- Reduces both history graphs to two-thirds of their prior height.
+- Rebuilds System as a native one-column Unraid dashboard panel.
+- Adds live CPU topology, memory, network, power, and cooling telemetry.
+- Adds best-effort Intel GPU and video process attribution.
+- Replaces 100 ms server polling with one combined snapshot per second.
+- Keeps persistent settings during forced rolling updates.
+</CHANGES>
+
+<!-- Stop the prior watcher before replacing the RAM-backed runtime tree. -->
+<FILE Run="/bin/bash">
+<INLINE>
+<![CDATA[
+set -e
+
+RUNTIME_DIR="/usr/local/emhttp/plugins/waz.dashboard"
+CONFIG_DIR="/boot/config/plugins/waz.dashboard"
+
+if [ -x "$RUNTIME_DIR/scripts/stop.sh" ]; then
+  "$RUNTIME_DIR/scripts/stop.sh" || true
+fi
+rm -rf "$RUNTIME_DIR"
+mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
+]]>
+</INLINE>
+</FILE>
+
+@@FILES@@
+
+<FILE Run="/bin/bash">
+<INLINE>
+<![CDATA[
+set -e
+
+RUNTIME_DIR="/usr/local/emhttp/plugins/waz.dashboard"
+CONFIG_DIR="/boot/config/plugins/waz.dashboard"
+CONFIG_FILE="$CONFIG_DIR/waz.dashboard.cfg"
+LEGACY_HEALTH_CONFIG="/boot/config/plugins/waz.health/waz.health.cfg"
+LEGACY_HEALTH_PLUGIN="/boot/config/plugins/waz.health.plg"
+
+chmod 0644 "$RUNTIME_DIR/WazDashboard.page" "$RUNTIME_DIR/WazWorkloads.page" "$RUNTIME_DIR/WazStorage.page" "$RUNTIME_DIR/WazHealthBanner.page"
+chmod 0644 "$RUNTIME_DIR/assets/css/system.css" "$RUNTIME_DIR/assets/css/workloads.css" "$RUNTIME_DIR/assets/css/storage.css" "$RUNTIME_DIR/assets/css/banner.css"
+chmod 0644 "$RUNTIME_DIR/assets/js/system.js" "$RUNTIME_DIR/assets/js/workloads.js" "$RUNTIME_DIR/assets/js/storage.js" "$RUNTIME_DIR/assets/js/banner.js"
+chmod 0644 "$RUNTIME_DIR/include/metrics.php" "$RUNTIME_DIR/include/workloads.php" "$RUNTIME_DIR/include/storage.php" "$RUNTIME_DIR/include/gpu-sampler.php" "$RUNTIME_DIR/include/health.php" "$RUNTIME_DIR/include/status.php"
+chmod 0755 "$RUNTIME_DIR/scripts/start.sh" "$RUNTIME_DIR/scripts/stop.sh"
+
+php -l "$RUNTIME_DIR/include/metrics.php" >/dev/null
+php -l "$RUNTIME_DIR/include/workloads.php" >/dev/null
+php -l "$RUNTIME_DIR/include/storage.php" >/dev/null
+php -l "$RUNTIME_DIR/include/gpu-sampler.php" >/dev/null
+php -l "$RUNTIME_DIR/include/health.php" >/dev/null
+php -l "$RUNTIME_DIR/include/status.php" >/dev/null
+
+if [ ! -f "$CONFIG_FILE" ]; then
+  cat > "$CONFIG_FILE" <<'WAZ_CONFIG'
+DISPLAY_NAME="WAZ-SERVER"
+PRIMARY_INTERFACE="bond0"
+GPU_CARD="auto"
+GPU_RECENT_SECONDS="5"
+OVERALL_STATE="normal"
+OVERALL_MESSAGE=""
+ARRAY_STATE="normal"
+ARRAY_MESSAGE=""
+STORAGE_STATE="normal"
+STORAGE_MESSAGE=""
+COOLING_STATE="normal"
+COOLING_MESSAGE=""
+UPS_STATE="normal"
+UPS_MESSAGE=""
+STORAGE_WARN_PERCENT="95"
+STORAGE_FAULT_PERCENT="98"
+CPU_WARN_C="60"
+CPU_FAULT_C="70"
+COOLANT_WARN_C="35"
+COOLANT_FAULT_C="40"
+FLOW_WARN_LPH="130"
+FLOW_FAULT_LPH="120"
+THROTTLE_LATCH_SECONDS="300"
+UPS_LOAD_WARN_PERCENT="90"
+UPS_LOAD_FAULT_PERCENT="100"
+WAZ_CONFIG
+fi
+
+for DEFAULT in \
+  'DISPLAY_NAME="WAZ-SERVER"' \
+  'PRIMARY_INTERFACE="bond0"' \
+  'GPU_CARD="auto"' \
+  'GPU_RECENT_SECONDS="5"' \
+  'OVERALL_STATE="normal"' \
+  'OVERALL_MESSAGE=""' \
+  'ARRAY_STATE="normal"' \
+  'ARRAY_MESSAGE=""' \
+  'STORAGE_STATE="normal"' \
+  'STORAGE_MESSAGE=""' \
+  'COOLING_STATE="normal"' \
+  'COOLING_MESSAGE=""' \
+  'UPS_STATE="normal"' \
+  'UPS_MESSAGE=""' \
+  'STORAGE_WARN_PERCENT="95"' \
+  'STORAGE_FAULT_PERCENT="98"' \
+  'CPU_WARN_C="60"' \
+  'CPU_FAULT_C="70"' \
+  'COOLANT_WARN_C="35"' \
+  'COOLANT_FAULT_C="40"' \
+  'FLOW_WARN_LPH="130"' \
+  'FLOW_FAULT_LPH="120"' \
+  'THROTTLE_LATCH_SECONDS="300"' \
+  'UPS_LOAD_WARN_PERCENT="90"' \
+  'UPS_LOAD_FAULT_PERCENT="100"'; do
+  KEY="${DEFAULT%%=*}"
+  if ! grep -q "^${KEY}=" "$CONFIG_FILE"; then
+    LEGACY_VALUE=""
+    if [ -f "$LEGACY_HEALTH_CONFIG" ]; then
+      LEGACY_VALUE="$(grep -m1 "^${KEY}=" "$LEGACY_HEALTH_CONFIG" 2>/dev/null || true)"
+    fi
+    printf '%s\n' "${LEGACY_VALUE:-$DEFAULT}" >> "$CONFIG_FILE"
+  fi
+done
+
+chmod 0644 "$CONFIG_FILE"
+mkdir -p /var/run/waz.dashboard
+rm -f "/var/tmp/waz-health-throttle-state.json"
+
+if [ -f "$LEGACY_HEALTH_PLUGIN" ]; then
+  mv -f "$LEGACY_HEALTH_PLUGIN" "${LEGACY_HEALTH_PLUGIN}.disabled"
+fi
+rm -rf "/usr/local/emhttp/plugins/waz.health"
+
+"$RUNTIME_DIR/scripts/start.sh"
+
+echo "WAZ Dashboard v@@APP_VERSION@@ installed with integrated Health banner. Reload the Unraid WebUI to display it."
+]]>
+</INLINE>
+</FILE>
+
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+<![CDATA[
+RUNTIME_DIR="/usr/local/emhttp/plugins/waz.dashboard"
+
+if [ -x "$RUNTIME_DIR/scripts/stop.sh" ]; then
+  "$RUNTIME_DIR/scripts/stop.sh" || true
+fi
+rm -rf "$RUNTIME_DIR"
+rm -rf "/boot/config/plugins/waz.dashboard"
+rm -rf "/var/run/waz.dashboard"
+rm -f "/boot/config/plugins/waz.dashboard.plg"
+echo "WAZ System removed. Reload the Dashboard to clear the panel."
+]]>
+</INLINE>
+</FILE>
+</PLUGIN>

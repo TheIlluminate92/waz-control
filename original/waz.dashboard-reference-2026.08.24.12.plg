@@ -1,0 +1,613 @@
+<?xml version="1.0"?>
+<PLUGIN name="waz.dashboard" author="Waz-Server custom" version="2026.08.24.12" min="7.2.0">
+<CHANGES>
+###2026.08.24.12
+- Smooth each logical CPU over a three-second rolling window while retaining 100 ms sampling.
+- Keep logical-CPU rows mounted between samples so bar-width transitions animate continuously.
+
+###2026.08.24.11
+- Sample CPU, logical-CPU, and power metrics every 100 ms.
+- Display overall CPU, logical-CPU, and power as true time-based rolling one-second averages.
+- Plot the main CPU graph once per second using a slower five-second rolling average.
+- Swap Coolant Flow and Package Temperature positions.
+- Add signed Package minus Coolant temperature delta as a fifth live metric.
+
+###2026.08.23.10
+- Use a true three-second running average for overall and logical-CPU bars.
+- Keep the graph smoothing and raw numeric percentages unchanged.
+
+###2026.08.23.9
+- Smooth each logical CPU bar independently.
+- Animate bar-width changes between 250 ms samples.
+
+###2026.08.23.8
+- Smooth the CPU graph with an exponential moving average.
+- Keep live CPU values at the responsive 250 ms sampling rate.
+
+###2026.08.23.7
+- Render all 16 logical processors as separate rows rather than eight grouped cards.
+- Display detected logical-CPU count and visible plugin v7 marker.
+
+###2026.08.23.6
+- Show every logical processor separately, including labeled hyperthreads.
+- Group CPU and HT activity beneath the physical core and shared temperature.
+
+###2026.08.23.5
+- Replace the CPU canvas with an always-visible inline SVG graph.
+- Stretch partial history across the chart while the five-minute buffer fills.
+
+###2026.08.23.4
+- Replace the live interval with a self-scheduling 250 ms loop and visible timestamp.
+- Clear legacy timers when the dashboard script reloads.
+- Increase pool mini-card sizing by approximately 1.5x.
+
+###2026.08.23.3
+- Increase live System/Cooling sampling to 250 ms with overlap protection.
+
+###2026.08.23.2
+- One-second live CPU, power, temperature, and cooling updates.
+- Rolling five-minute CPU-load graph.
+- Explicit per-drive rows in each compact pool card.
+
+###2026.08.23
+- Initial release for the Unraid 7.2+ responsive dashboard.
+</CHANGES>
+<FILE Name="/usr/local/emhttp/plugins/waz.dashboard/WazDashboard.page"><INLINE><![CDATA[
+Menu="Dashboard:0"
+Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'7.2.0','>=')"
+
+---
+
+<?PHP
+$pluginname = 'waz.dashboard';
+
+$mytiles[$pluginname]['column1'] = <<<'EOT'
+<tbody title="Compact view of every configured storage pool">
+<tr><td>
+<span class="tile-header">
+  <span class="tile-header-left">
+    <i class="icon-hdd f32"></i>
+    <div class="section"><h3 class="tile-header-main">Pools</h3><span id="waz-pool-summary">Loading...</span></div>
+  </span>
+</span>
+</td></tr>
+<tr><td><div id="waz-pools" class="waz-pool-grid"><span class="waz-muted">Loading pool data...</span></div></td></tr>
+</tbody>
+
+<tbody title="Processor, CPU package temperature, and Aqua Computer High Flow NEXT">
+<tr><td>
+<span class="tile-header">
+  <span class="tile-header-left">
+    <i class="icon-performance f32"></i>
+    <div class="section"><h3 class="tile-header-main">System</h3><span id="waz-cpu-model">Loading processor...</span></div>
+  </span>
+</span>
+</td></tr>
+<tr><td>
+  <div class="waz-metric-strip">
+    <span><b>Total power · 1 s avg</b><strong id="waz-power">--</strong></span>
+    <span><b>Coolant flow</b><strong id="waz-flow" class="waz-flow">--</strong></span>
+    <span><b>Package temp</b><strong id="waz-cpu-temp">--</strong></span>
+    <span><b>Coolant temp</b><strong id="waz-coolant-temp">--</strong></span>
+    <span><b>Package − coolant Δ</b><strong id="waz-temp-delta">--</strong></span>
+  </div>
+  <div class="waz-overall"><span>Overall load · 1 s avg · <span id="waz-thread-count">-- logical CPUs</span></span><b id="waz-overall-value">--</b><div class="waz-bar"><span id="waz-overall-bar"></span></div></div>
+  <div id="waz-cores" class="waz-core-grid" title="Logical CPU bars use a three-second rolling average"><span class="waz-muted">Sampling CPU cores...</span></div>
+  <div class="waz-graph-wrap"><span class="waz-graph-label">CPU load · 5 s rolling avg · 1 s plot · rolling 5 minutes · updated <span id="waz-update-time">--</span> · plugin v12</span><svg id="waz-cpu-graph" viewBox="0 0 1200 100" preserveAspectRatio="none" aria-label="Five-second rolling-average CPU load graph"><line x1="0" y1="25" x2="1200" y2="25"></line><line x1="0" y1="50" x2="1200" y2="50"></line><line x1="0" y1="75" x2="1200" y2="75"></line><polyline id="waz-cpu-line" points=""></polyline></svg></div>
+</td></tr>
+</tbody>
+EOT;
+?>
+
+<style>
+.waz-pool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.85rem 1.25rem}
+.waz-pool{min-width:0;min-height:8.5rem;padding:.7rem .85rem;border:1px solid var(--border-color,#444);border-radius:4px;font-size:1.03em}
+.waz-pool-line{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;line-height:1.25}
+.waz-pool-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.waz-pool-size{font-size:.9em;white-space:nowrap;color:var(--text-color,#606060)}
+.waz-device-table{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:.38rem .75rem;margin-top:.65rem;font-size:.94em;line-height:1.3;align-items:center}
+.waz-device-head{font-size:.78em;opacity:.6;text-transform:uppercase}
+.waz-device-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.waz-device-cell{text-align:right;white-space:nowrap}
+.waz-good{color:#3cba00}.waz-bad{color:#dd4b39}
+.waz-bar{height:5px;margin-top:.25rem;border-radius:3px;overflow:hidden;background:var(--dashstats-pie-after-bg-color,#ddd)}
+.waz-bar>span{display:block;height:100%;background:#00a65a;transition:width .09s linear}
+.waz-bar>span.waz-warn{background:#f39c12}
+.waz-bar>span.waz-crit{background:#dd4b39}
+.waz-metric-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.5rem;margin-bottom:.65rem}
+.waz-metric-strip span{display:flex;flex-direction:column;min-width:0}
+.waz-metric-strip b{font-size:.82em;opacity:.72;text-transform:uppercase}
+.waz-metric-strip strong{font-size:1.08em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.waz-overall{display:grid;grid-template-columns:auto 3.5rem minmax(6rem,1fr);align-items:center;gap:.6rem;margin-bottom:.55rem}
+.waz-overall>b{text-align:right;color:#3cba00}
+.waz-overall .waz-bar{margin:0;height:8px}
+.waz-core-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem 1rem}
+.waz-logical{display:grid;grid-template-columns:minmax(8rem,auto) 3rem minmax(4rem,1fr) 3.4rem;align-items:center;gap:.45rem;min-width:0;padding:.22rem .4rem;border:1px solid rgba(128,128,128,.16);border-radius:3px}
+.waz-logical-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.waz-logical-load{text-align:right;color:#3cba00}
+.waz-logical-temp{text-align:right;white-space:nowrap}
+.waz-logical .waz-bar{margin:0;height:7px}
+.waz-logical .waz-bar>span{transition:width .25s ease-out;will-change:width}
+.waz-graph-wrap{position:relative;margin-top:.65rem;height:115px;border:1px solid var(--border-color,#444);background:rgba(0,0,0,.08)}
+.waz-graph-wrap svg{display:block;width:100%;height:100%;overflow:visible}
+.waz-graph-wrap line{stroke:rgba(128,128,128,.22);stroke-width:1;vector-effect:non-scaling-stroke}
+.waz-graph-wrap polyline{fill:none;stroke:#3cba00;stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round}
+.waz-graph-label{position:absolute;z-index:1;top:.25rem;left:.4rem;font-size:.78em;opacity:.65;pointer-events:none}
+.waz-flow{color:#00a6d6}
+.waz-muted{opacity:.7}
+@media(max-width:700px){.waz-pool-grid,.waz-core-grid{grid-template-columns:1fr}.waz-metric-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+
+<script>
+(function(){
+  ['wazDashboardTimer','wazDashboardSystemTimer','wazDashboardPoolTimer','wazDashboardSystemTimeout'].forEach(function(name) {
+    if (window[name]) { window.clearInterval(window[name]); window.clearTimeout(window[name]); window[name] = null; }
+  });
+  if (window.wazDashboardResizeHandler) window.removeEventListener('resize', window.wazDashboardResizeHandler);
+  window.wazDashboardStarted = true;
+
+  function text(id, value) {
+    var node = document.getElementById(id);
+    if (node) node.textContent = value;
+  }
+
+  function esc(value) {
+    return String(value).replace(/[&<>'"]/g, function(c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c];
+    });
+  }
+
+  var cpuHistory = [];
+  var threadSamples = {};
+  var threadNodes = {};
+  var logicalSignature = null;
+  var overallSamples = [];
+  var powerSamples = [];
+  var graphSamples = [];
+  var lastGraphPointAt = 0;
+  var DISPLAY_WINDOW_MS = 1000;
+  var THREAD_WINDOW_MS = 3000;
+  var GRAPH_WINDOW_MS = 5000;
+  var GRAPH_INTERVAL_MS = 1000;
+
+  function runningAverage(samples, value, sampledAt, windowMs) {
+    samples.push({at:sampledAt, value:value});
+    var cutoff = sampledAt - windowMs;
+    while (samples.length > 1 && samples[0].at < cutoff) samples.shift();
+    return samples.reduce(function(total, sample) { return total + sample.value; }, 0) / samples.length;
+  }
+
+  function drawGraph() {
+    var line = document.getElementById('waz-cpu-line');
+    if (!line) return;
+    var divisor = Math.max(1, cpuHistory.length - 1);
+    line.setAttribute('points', cpuHistory.map(function(value,index) {
+      return (index / divisor * 1200).toFixed(1) + ',' + (100 - value).toFixed(1);
+    }).join(' '));
+  }
+
+  function rebuildLogicalRows(target, logical) {
+    target.innerHTML = '';
+    threadNodes = {};
+    if (!logical.length) {
+      var empty = document.createElement('span');
+      empty.className = 'waz-muted';
+      empty.textContent = 'No logical CPU data found.';
+      target.appendChild(empty);
+      return;
+    }
+    logical.forEach(function(thread) {
+      var key = String(thread.cpu_id);
+      var row = document.createElement('div');
+      row.className = 'waz-logical';
+
+      var name = document.createElement('span');
+      name.className = 'waz-logical-name';
+      name.textContent = (thread.hyperthread ? 'HT ' : 'CPU ') + thread.cpu_id + ' · Core ' + thread.core_id;
+
+      var load = document.createElement('span');
+      load.className = 'waz-logical-load';
+      load.textContent = '...';
+
+      var bar = document.createElement('div');
+      bar.className = 'waz-bar';
+      var fill = document.createElement('span');
+      fill.style.width = '0%';
+      bar.appendChild(fill);
+
+      var temp = document.createElement('span');
+      temp.className = 'waz-logical-temp';
+      temp.textContent = '--';
+
+      row.appendChild(name);
+      row.appendChild(load);
+      row.appendChild(bar);
+      row.appendChild(temp);
+      target.appendChild(row);
+      threadNodes[key] = {load:load, fill:fill, temp:temp};
+    });
+  }
+
+  function renderSystem(data) {
+    var now = new Date();
+    var sampledAt = now.getTime();
+    text('waz-update-time', now.toLocaleTimeString([], {hour12:false}) + '.' + String(now.getMilliseconds()).padStart(3, '0'));
+    text('waz-cpu-model', data.cpu.model || 'Unavailable');
+    var power = data.cpu.power_w === null ? null : runningAverage(powerSamples, data.cpu.power_w, sampledAt, DISPLAY_WINDOW_MS);
+    text('waz-power', power === null ? 'Unavailable' : power.toFixed(1) + ' W');
+    text('waz-cpu-temp', data.cpu.package_c === null ? 'Unavailable' : data.cpu.package_c.toFixed(1) + ' °C');
+    text('waz-flow', data.cooling.flow_lph === null ? 'High Flow NEXT not found' : data.cooling.flow_lph.toFixed(1) + ' L/h');
+    text('waz-coolant-temp', data.cooling.coolant_c === null ? 'Unavailable' : data.cooling.coolant_c.toFixed(1) + ' °C');
+    var delta = data.cpu.package_c === null || data.cooling.coolant_c === null ? null : data.cpu.package_c - data.cooling.coolant_c;
+    text('waz-temp-delta', delta === null ? 'Unavailable' : (delta >= 0 ? '+' : '') + delta.toFixed(1) + ' °C');
+
+    var overall = data.cpu.overall_percent;
+    var averagedOverall = overall === null ? null : runningAverage(overallSamples, Math.min(100, Math.max(0, overall)), sampledAt, DISPLAY_WINDOW_MS);
+    text('waz-overall-value', averagedOverall === null ? 'Sampling' : averagedOverall.toFixed(0) + '%');
+    var overallBar = document.getElementById('waz-overall-bar');
+    if (overallBar) {
+      overallBar.style.width = (averagedOverall === null ? 0 : averagedOverall) + '%';
+    }
+    if (overall !== null) {
+      var graphAverage = runningAverage(graphSamples, Math.min(100, Math.max(0, overall)), sampledAt, GRAPH_WINDOW_MS);
+      if (lastGraphPointAt === 0 || sampledAt - lastGraphPointAt >= GRAPH_INTERVAL_MS) {
+        cpuHistory.push(graphAverage);
+        if (cpuHistory.length > 300) cpuHistory.shift();
+        lastGraphPointAt = sampledAt;
+        drawGraph();
+      }
+    }
+    var coresTarget = document.getElementById('waz-cores');
+    if (coresTarget) {
+      var logical = [];
+      (data.cpu.cores || []).forEach(function(core) {
+        (core.threads || []).forEach(function(thread) {
+          logical.push({core_id:core.core_id,temp_c:core.temp_c,cpu_id:thread.cpu_id,hyperthread:thread.hyperthread,load_percent:thread.load_percent});
+        });
+      });
+      logical.sort(function(a,b) { return a.cpu_id - b.cpu_id; });
+      text('waz-thread-count', logical.length + ' logical CPUs');
+      var signature = logical.map(function(thread) {
+        return thread.cpu_id + ':' + thread.core_id + ':' + (thread.hyperthread ? '1' : '0');
+      }).join('|');
+      if (signature !== logicalSignature) {
+        rebuildLogicalRows(coresTarget, logical);
+        logicalSignature = signature;
+        var activeThreads = {};
+        logical.forEach(function(thread) { activeThreads[String(thread.cpu_id)] = true; });
+        Object.keys(threadSamples).forEach(function(key) {
+          if (!activeThreads[key]) delete threadSamples[key];
+        });
+      }
+      logical.forEach(function(thread) {
+        var key = String(thread.cpu_id);
+        var nodes = threadNodes[key];
+        if (!nodes) return;
+        var rawWidth = thread.load_percent === null ? 0 : Math.min(100, Math.max(0, thread.load_percent));
+        if (!threadSamples[key]) threadSamples[key] = [];
+        var width = thread.load_percent === null ? null : runningAverage(threadSamples[key], rawWidth, sampledAt, THREAD_WINDOW_MS);
+        nodes.load.textContent = width === null ? '...' : width.toFixed(0) + '%';
+        nodes.fill.style.width = (width === null ? 0 : width) + '%';
+        nodes.temp.textContent = thread.temp_c === null ? '--' : thread.temp_c.toFixed(0) + ' °C';
+      });
+    }
+
+  }
+
+  function renderPools(data) {
+    var pools = data.pools || [];
+    text('waz-pool-summary', pools.length + (pools.length === 1 ? ' pool' : ' pools'));
+    var target = document.getElementById('waz-pools');
+    if (!target) return;
+    if (!pools.length) {
+      target.innerHTML = '<span class="waz-muted">No pool configuration files found.</span>';
+      return;
+    }
+    target.innerHTML = pools.map(function(pool) {
+      if (!pool.mounted) {
+        return '<div class="waz-pool"><div class="waz-pool-line"><span class="waz-pool-name">' + esc(pool.name) + '</span><span class="waz-pool-size">Unmounted</span></div><div class="waz-bar"><span class="waz-crit" style="width:100%"></span></div></div>';
+      }
+      var level = pool.percent >= 90 ? 'waz-crit' : (pool.percent >= 75 ? 'waz-warn' : '');
+      var members = (pool.devices || []).map(function(dev) {
+        var temp = dev.temp_c === null ? '--' : dev.temp_c.toFixed(0) + '°C';
+        return '<span class="waz-device-name">' + esc(dev.name) + '</span><span class="waz-device-cell ' + (dev.online ? 'waz-good' : 'waz-bad') + '">' + (dev.online ? 'active' : 'offline') + '</span><span class="waz-device-cell">' + temp + '</span><span class="waz-device-cell ' + (dev.healthy ? 'waz-good' : 'waz-bad') + '">' + (dev.healthy ? 'healthy' : esc(dev.status)) + '</span>';
+      }).join('');
+      var header = '<span class="waz-device-head">Drive</span><span class="waz-device-head">State</span><span class="waz-device-head">Temp</span><span class="waz-device-head">Health</span>';
+      return '<div class="waz-pool"><div class="waz-pool-line"><span class="waz-pool-name">' + esc(pool.name) + ' <small class="' + (pool.online ? 'waz-good' : 'waz-bad') + '">' + (pool.online ? 'ONLINE' : 'OFFLINE') + '</small></span><span class="waz-pool-size">' + esc(pool.used_human) + ' / ' + esc(pool.total_human) + ' (' + pool.percent.toFixed(0) + '%)</span></div><div class="waz-bar"><span class="' + level + '" style="width:' + Math.min(100, Math.max(0, pool.percent)) + '%"></span></div><div class="waz-device-table">' + header + (members || '<span class="waz-muted">No assigned drives found</span>') + '</div></div>';
+    }).join('');
+  }
+
+  function refreshSystem() {
+    return fetch('/plugins/waz.dashboard/metrics.php?section=system&_=' + Date.now(), {cache:'no-store', credentials:'same-origin'})
+      .then(function(response) { if (!response.ok) throw new Error(response.status); return response.json(); })
+      .then(renderSystem)
+      .catch(function() {
+        text('waz-flow', 'Data unavailable');
+      });
+  }
+
+  function refreshPools() {
+    fetch('/plugins/waz.dashboard/metrics.php?section=pools', {cache:'no-store', credentials:'same-origin'})
+      .then(function(response) { if (!response.ok) throw new Error(response.status); return response.json(); })
+      .then(renderPools)
+      .catch(function() { text('waz-pool-summary', 'Data unavailable'); });
+  }
+
+  function systemLoop() {
+    var started = performance.now();
+    refreshSystem().finally(function() {
+      var delay = Math.max(0, 100 - (performance.now() - started));
+      window.wazDashboardSystemTimeout = window.setTimeout(systemLoop, delay);
+    });
+  }
+
+  systemLoop(); refreshPools();
+  window.wazDashboardPoolTimer = window.setInterval(refreshPools, 5000);
+  window.wazDashboardResizeHandler = drawGraph;
+  window.addEventListener('resize', window.wazDashboardResizeHandler);
+})();
+</script>
+]]></INLINE></FILE>
+<FILE Name="/usr/local/emhttp/plugins/waz.dashboard/metrics.php"><INLINE><![CDATA[
+<?php
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+
+function read_trimmed($path) {
+    $value = @file_get_contents($path);
+    return $value === false ? null : trim($value);
+}
+
+function hwmon_path($wanted) {
+    foreach (glob('/sys/class/hwmon/hwmon*') ?: [] as $path) {
+        if (read_trimmed($path . '/name') === $wanted) return $path;
+    }
+    return null;
+}
+
+function numeric_input($path, $divisor) {
+    $value = read_trimmed($path);
+    return $value !== null && is_numeric($value) ? ((float)$value / $divisor) : null;
+}
+
+function core_temperatures() {
+    $hwmon = hwmon_path('coretemp');
+    $result = ['package' => null, 'cores' => []];
+    if ($hwmon === null) return $result;
+    foreach (glob($hwmon . '/temp*_input') ?: [] as $input) {
+        $value = numeric_input($input, 1000.0);
+        if ($value === null) continue;
+        $label = read_trimmed(preg_replace('/_input$/', '_label', $input));
+        if ($label !== null && stripos($label, 'Package id') === 0) $result['package'] = $value;
+        if ($label !== null && preg_match('/^Core\s+(\d+)$/i', $label, $match)) $result['cores'][(string)(int)$match[1]] = $value;
+    }
+    return $result;
+}
+
+function cpu_model() {
+    $contents = @file('/proc/cpuinfo', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($contents ?: [] as $line) {
+        if (preg_match('/^model name\s*:\s*(.+)$/i', $line, $match)) return trim($match[1]);
+    }
+    return php_uname('m');
+}
+
+function human_bytes($bytes) {
+    $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+    $value = (float)$bytes;
+    $unit = 0;
+    while ($value >= 1000.0 && $unit < count($units) - 1) { $value /= 1000.0; $unit++; }
+    $precision = $value >= 100 || $unit === 0 ? 0 : ($value >= 10 ? 1 : 2);
+    return number_format($value, $precision, '.', '') . ' ' . $units[$unit];
+}
+
+function mount_points() {
+    $points = [];
+    foreach (@file('/proc/self/mountinfo', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+        $parts = explode(' ', $line);
+        if (count($parts) < 5) continue;
+        $path = str_replace(['\\040','\\011','\\012','\\134'], [' ',"\t","\n",'\\'], $parts[4]);
+        $points[$path] = true;
+    }
+    return $points;
+}
+
+function cpu_counters() {
+    $result = [];
+    foreach (@file('/proc/stat', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+        if (!preg_match('/^(cpu\d*)\s+(.+)$/', $line, $match)) continue;
+        $values = array_map('intval', preg_split('/\s+/', trim($match[2])));
+        $total = array_sum($values);
+        $idle = ($values[3] ?? 0) + ($values[4] ?? 0);
+        $result[$match[1]] = ['total' => $total, 'idle' => $idle];
+    }
+    return $result;
+}
+
+function cpu_loads($current, $previous) {
+    $result = [];
+    foreach ($current as $name => $now) {
+        if (!isset($previous[$name])) { $result[$name] = null; continue; }
+        $total = $now['total'] - $previous[$name]['total'];
+        $idle = $now['idle'] - $previous[$name]['idle'];
+        $result[$name] = $total > 0 ? max(0.0, min(100.0, 100.0 * ($total - $idle) / $total)) : null;
+    }
+    return $result;
+}
+
+function rapl_energy() {
+    $result = [];
+    foreach (glob('/sys/class/powercap/intel-rapl:*') ?: [] as $path) {
+        $name = read_trimmed($path . '/name');
+        if ($name === null || stripos($name, 'package-') !== 0) continue;
+        $energy = read_trimmed($path . '/energy_uj');
+        if ($energy !== null && is_numeric($energy)) {
+            $result[basename($path)] = ['energy' => (float)$energy, 'max' => (float)(read_trimmed($path . '/max_energy_range_uj') ?: 0)];
+        }
+    }
+    return $result;
+}
+
+function rapl_power($current, $previous, $seconds) {
+    if ($seconds <= 0 || !$current || !$previous) return null;
+    $delta = 0.0;
+    $found = false;
+    foreach ($current as $name => $now) {
+        if (!isset($previous[$name])) continue;
+        $change = $now['energy'] - $previous[$name]['energy'];
+        if ($change < 0 && $now['max'] > 0) $change += $now['max'];
+        if ($change >= 0) { $delta += $change; $found = true; }
+    }
+    return $found ? $delta / 1000000.0 / $seconds : null;
+}
+
+function sampled_cpu() {
+    $nowTime = microtime(true);
+    $nowCpu = cpu_counters();
+    $nowRapl = rapl_energy();
+    $statePath = '/tmp/waz.dashboard.cpu.json';
+    $previous = [];
+    $handle = @fopen($statePath, 'c+');
+    if ($handle !== false) {
+        @flock($handle, LOCK_EX);
+        $raw = stream_get_contents($handle);
+        $previous = json_decode($raw ?: '{}', true) ?: [];
+        rewind($handle);
+        ftruncate($handle, 0);
+        fwrite($handle, json_encode(['time' => $nowTime, 'cpu' => $nowCpu, 'rapl' => $nowRapl]));
+        fflush($handle);
+        @flock($handle, LOCK_UN);
+        fclose($handle);
+    }
+    $loads = cpu_loads($nowCpu, $previous['cpu'] ?? []);
+    $seconds = $nowTime - (float)($previous['time'] ?? $nowTime);
+    return ['loads' => $loads, 'power_w' => rapl_power($nowRapl, $previous['rapl'] ?? [], $seconds)];
+}
+
+function cpu_cores($loads, $temperatures) {
+    $groups = [];
+    foreach (glob('/sys/devices/system/cpu/cpu[0-9]*') ?: [] as $path) {
+        if (!preg_match('/cpu(\d+)$/', $path, $match)) continue;
+        $cpu = (int)$match[1];
+        if (read_trimmed($path . '/online') === '0') continue;
+        $core = read_trimmed($path . '/topology/core_id');
+        $package = read_trimmed($path . '/topology/physical_package_id');
+        if ($core === null) continue;
+        $key = ($package ?? '0') . ':' . $core;
+        if (!isset($groups[$key])) $groups[$key] = ['core_id' => (int)$core, 'package_id' => (int)($package ?? 0), 'cpus' => [], 'threads' => []];
+        $groups[$key]['cpus'][] = $cpu;
+        $groups[$key]['threads'][] = ['cpu_id' => $cpu, 'load_percent' => $loads['cpu' . $cpu] ?? null];
+    }
+    $result = [];
+    foreach ($groups as $group) {
+        sort($group['cpus']);
+        usort($group['threads'], fn($a, $b) => $a['cpu_id'] <=> $b['cpu_id']);
+        foreach ($group['threads'] as $index => &$thread) $thread['hyperthread'] = $index > 0;
+        unset($thread);
+        $result[] = [
+            'core_id' => $group['core_id'],
+            'package_id' => $group['package_id'],
+            'cpus' => $group['cpus'],
+            'threads' => $group['threads'],
+            'temp_c' => $temperatures['cores'][(string)$group['core_id']] ?? null,
+        ];
+    }
+    usort($result, fn($a, $b) => [$a['package_id'], $a['core_id']] <=> [$b['package_id'], $b['core_id']]);
+    return $result;
+}
+
+function disk_state() {
+    $state = @parse_ini_file('/var/local/emhttp/disks.ini', true, INI_SCANNER_RAW);
+    return is_array($state) ? $state : [];
+}
+
+function pool_devices($poolName, $disks) {
+    $result = [];
+    $pattern = '/^' . preg_quote($poolName, '/') . '(?:\d+)?$/i';
+    foreach ($disks as $section => $disk) {
+        $name = (string)($disk['name'] ?? $section);
+        if (!preg_match($pattern, $name)) continue;
+        $status = (string)($disk['status'] ?? $disk['color'] ?? 'unknown');
+        $healthy = stripos($status, 'DISK_OK') !== false || stripos($status, 'green') !== false || stripos($status, 'blue') !== false;
+        $online = !empty($disk['device']) && stripos($status, '_NP') === false && stripos($status, 'missing') === false && stripos($status, 'DSBL') === false;
+        $temp = $disk['temp'] ?? null;
+        $result[] = [
+            'name' => $name,
+            'temp_c' => is_numeric($temp) ? (float)$temp : null,
+            'online' => $online,
+            'healthy' => $healthy,
+            'status' => $status,
+        ];
+    }
+    usort($result, fn($a, $b) => strnatcasecmp($a['name'], $b['name']));
+    return $result;
+}
+
+function pools() {
+    $result = [];
+    $mounted = mount_points();
+    $disks = disk_state();
+    foreach (glob('/boot/config/pools/*.cfg') ?: [] as $config) {
+        $name = pathinfo($config, PATHINFO_FILENAME);
+        $path = '/mnt/' . $name;
+        $devices = pool_devices($name, $disks);
+        $pool = ['name' => $name, 'mounted' => isset($mounted[$path]), 'devices' => $devices];
+        $pool['online'] = $pool['mounted'] && (!$devices || count(array_filter($devices, fn($device) => !$device['healthy'] || !$device['online'])) === 0);
+        if ($pool['mounted']) {
+            $total = @disk_total_space($path);
+            $free = @disk_free_space($path);
+            if ($total !== false && $free !== false) {
+                $total = (float)$total;
+                $free = (float)$free;
+                $used = max(0, $total - $free);
+                $pool['percent'] = $total > 0 ? ($used * 100.0 / $total) : 0.0;
+                $pool['used_human'] = human_bytes($used);
+                $pool['total_human'] = human_bytes($total);
+            } else {
+                $pool['mounted'] = false;
+            }
+        }
+        $result[] = $pool;
+    }
+    usort($result, fn($a, $b) => strnatcasecmp($a['name'], $b['name']));
+    return $result;
+}
+
+$section = (string)($_GET['section'] ?? 'all');
+$output = [];
+
+if ($section === 'system' || $section === 'all') {
+    $flow = null;
+    $coolant = null;
+    $highFlow = hwmon_path('highflownext');
+    if ($highFlow !== null) {
+        $flow = numeric_input($highFlow . '/fan1_input', 10.0);
+        $coolant = numeric_input($highFlow . '/temp1_input', 1000.0);
+    }
+    $temperatures = core_temperatures();
+    $sample = sampled_cpu();
+    $output['cpu'] = [
+        'model' => cpu_model(),
+        'package_c' => $temperatures['package'],
+        'overall_percent' => $sample['loads']['cpu'] ?? null,
+        'power_w' => $sample['power_w'],
+        'cores' => cpu_cores($sample['loads'], $temperatures),
+    ];
+    $output['cooling'] = ['flow_lph' => $flow, 'coolant_c' => $coolant];
+}
+
+if ($section === 'pools' || $section === 'all') $output['pools'] = pools();
+
+echo json_encode($output, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+]]></INLINE></FILE>
+<FILE Run="/bin/bash"><INLINE><![CDATA[
+chmod 0644 /usr/local/emhttp/plugins/waz.dashboard/WazDashboard.page
+chmod 0644 /usr/local/emhttp/plugins/waz.dashboard/metrics.php
+echo "waz.dashboard: installed compact Pools and live System/Cooling dashboard tiles"
+]]></INLINE></FILE>
+<FILE Run="/bin/bash" Method="remove"><INLINE><![CDATA[
+rm -rf /usr/local/emhttp/plugins/waz.dashboard
+rm -f /boot/config/plugins/waz.dashboard.plg
+echo "waz.dashboard: removed"
+]]></INLINE></FILE>
+</PLUGIN>

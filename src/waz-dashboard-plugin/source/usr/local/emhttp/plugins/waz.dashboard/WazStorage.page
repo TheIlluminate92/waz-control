@@ -1,0 +1,66 @@
+Menu="Dashboard:0"
+Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'7.2.0','>=')"
+
+---
+
+<?PHP
+$pluginname = 'waz.storage';
+
+$mytiles[$pluginname]['column3'] = <<<'EOT'
+<tbody id="waz-storage-tile" title="Live parity, array, pool, and physical disk telemetry">
+<tr><td>
+  <section class="waz-storage" data-version="@@APP_VERSION@@">
+    <header class="waz-storage-header">
+      <span><b>STORAGE</b><small id="waz-storage-subtitle">Parity, pools, array, and locations</small></span>
+      <span id="waz-storage-health" class="waz-storage-health waz-is-loading"><i></i> CONNECTING</span>
+    </header>
+    <div id="waz-storage-alert" class="waz-storage-alert" hidden></div>
+
+    <section class="waz-storage-section waz-parity-section">
+      <div class="waz-storage-section-head">
+        <b>PARITY</b>
+        <span id="waz-parity-state">READING…</span>
+      </div>
+      <div class="waz-parity-body">
+        <div id="waz-parity-disks" class="waz-parity-disks"></div>
+        <div class="waz-parity-summary">
+          <strong id="waz-parity-summary">Waiting for parity state</strong>
+          <small id="waz-parity-detail">--</small>
+        </div>
+      </div>
+      <div class="waz-storage-meter"><i id="waz-parity-progress"></i></div>
+    </section>
+
+    <section class="waz-storage-section waz-pools-section">
+      <div class="waz-storage-section-head"><b>POOLS</b><span id="waz-pool-count">--</span></div>
+      <div id="waz-pool-tabs" class="waz-pool-tabs"></div>
+      <div id="waz-pool-detail" class="waz-pool-detail">
+        <div class="waz-pool-detail-head"><strong id="waz-pool-title">Select a pool</strong><span id="waz-pool-usage">--</span></div>
+        <div class="waz-storage-meter"><i id="waz-pool-bar"></i></div>
+        <div id="waz-pool-members" class="waz-pool-members"></div>
+      </div>
+    </section>
+
+    <section class="waz-storage-section waz-location-section">
+      <div class="waz-storage-section-head"><b>DISK LOCATION</b><span id="waz-location-count">--</span></div>
+      <div id="waz-location-groups" class="waz-location-groups"></div>
+    </section>
+
+    <section class="waz-storage-section waz-array-section">
+      <div class="waz-storage-section-head">
+        <b>ARRAY</b>
+        <span id="waz-array-summary">--</span>
+      </div>
+      <div class="waz-storage-meter"><i id="waz-array-bar"></i></div>
+      <div id="waz-array-disks" class="waz-array-disks"></div>
+    </section>
+
+    <footer class="waz-storage-footer"><span id="waz-storage-updated">Waiting for first snapshot</span><span>v@@APP_VERSION@@</span></footer>
+  </section>
+</td></tr>
+</tbody>
+EOT;
+?>
+
+<link rel="stylesheet" href="/plugins/waz.dashboard/assets/css/storage.css?v=@@APP_VERSION@@">
+<script defer src="/plugins/waz.dashboard/assets/js/storage.js?v=@@APP_VERSION@@"></script>

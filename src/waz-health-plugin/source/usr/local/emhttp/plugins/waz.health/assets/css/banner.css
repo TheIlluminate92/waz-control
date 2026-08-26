@@ -1,0 +1,223 @@
+:root {
+  --waz-health-background: #111417;
+  --waz-health-raised: #1b2025;
+  --waz-health-border: #303840;
+  --waz-health-text: #e6edf3;
+  --waz-health-muted: #87939f;
+  --waz-health-cyan: #22b8f0;
+  --waz-health-normal: #35c46a;
+  --waz-health-attention: #f2a900;
+  --waz-health-fault: #e55454;
+  --waz-health-unknown: #87939f;
+}
+
+#waz-health-banner.waz-health {
+  box-sizing: border-box;
+  position: sticky;
+  top: var(--waz-health-sticky-top, 0);
+  z-index: 100;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  height: auto;
+  margin: 0;
+  border-top: 1px solid var(--waz-health-border);
+  border-bottom: 1px solid var(--waz-health-border);
+  background: var(--waz-health-background);
+  color: var(--waz-health-text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+#waz-health-banner .waz-health__inner {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.4vw, 24px);
+  width: 100%;
+  height: 39px;
+  padding: 0 clamp(12px, 2vw, 28px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+
+#waz-health-banner .waz-health__issues {
+  box-sizing: border-box;
+  display: none;
+  align-items: center;
+  gap: clamp(18px, 2.5vw, 36px);
+  min-height: 30px;
+  padding: 5px clamp(12px, 2vw, 28px) 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-top: 1px solid var(--waz-health-border);
+  background: #0e1114;
+  scrollbar-width: thin;
+  white-space: nowrap;
+}
+
+#waz-health-banner.waz-health--expanded .waz-health__issues {
+  display: flex;
+}
+
+#waz-health-banner .waz-health__issue {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--waz-health-muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.035em;
+  text-transform: none;
+}
+
+#waz-health-banner .waz-health__issue strong {
+  color: inherit;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#waz-health-banner .waz-health__inner::-webkit-scrollbar {
+  display: none;
+}
+
+#waz-health-banner .waz-health__identity {
+  flex: 0 0 auto;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+#waz-health-banner .waz-health__overall,
+#waz-health-banner .waz-health__subsystem,
+#waz-health-banner .waz-health__meta,
+#waz-health-banner .waz-health__uptime {
+  display: inline-flex;
+  align-items: center;
+}
+
+#waz-health-banner .waz-health__overall {
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+#waz-health-banner .waz-health__subsystems {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  gap: clamp(10px, 1.35vw, 22px);
+}
+
+#waz-health-banner .waz-health__subsystem {
+  gap: 6px;
+  color: var(--waz-health-muted);
+}
+
+#waz-health-banner .waz-health__divider {
+  flex: 0 0 1px;
+  align-self: stretch;
+  height: 18px;
+  margin: auto 0;
+  background: var(--waz-health-border);
+}
+
+#waz-health-banner .waz-health__dot {
+  box-sizing: border-box;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--waz-health-unknown);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--waz-health-unknown) 16%, transparent);
+}
+
+#waz-health-banner [data-state="normal"] .waz-health__dot {
+  background: var(--waz-health-normal);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--waz-health-normal) 16%, transparent);
+}
+
+#waz-health-banner [data-state="attention"] {
+  color: var(--waz-health-attention);
+}
+
+#waz-health-banner [data-state="attention"] .waz-health__dot {
+  background: var(--waz-health-attention);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--waz-health-attention) 18%, transparent);
+}
+
+#waz-health-banner [data-state="fault"] {
+  color: var(--waz-health-fault);
+}
+
+#waz-health-banner [data-state="fault"] .waz-health__dot {
+  background: var(--waz-health-fault);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--waz-health-fault) 18%, transparent);
+}
+
+#waz-health-banner .waz-health__meta {
+  flex: 0 0 auto;
+  gap: clamp(12px, 1.3vw, 20px);
+  margin-left: auto;
+  color: var(--waz-health-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+#waz-health-banner .waz-health__uptime {
+  gap: 4px;
+}
+
+#waz-health-banner[data-connection="offline"] .waz-health__uptime {
+  opacity: 0.55;
+}
+
+@supports not (color: color-mix(in srgb, white, black)) {
+  :root {
+    --waz-health-background: #111417;
+    --waz-health-border: #303840;
+    --waz-health-muted: #87939f;
+  }
+}
+
+@media (max-width: 900px) {
+  #waz-health-banner .waz-health__inner {
+    height: 38px;
+  }
+
+  #waz-health-banner .waz-health__divider {
+    display: none;
+  }
+
+  #waz-health-banner .waz-health__subsystems {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 620px) {
+  #waz-health-banner .waz-health__inner {
+    gap: 14px;
+    padding: 0 12px;
+  }
+
+  #waz-health-banner .waz-health__identity {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    margin-left: -12px;
+    padding: 13px 10px 13px 12px;
+    background: var(--waz-health-background);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #waz-health-banner * {
+    scroll-behavior: auto !important;
+  }
+}

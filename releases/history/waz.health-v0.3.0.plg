@@ -1,0 +1,1323 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name "waz.health">
+  <!ENTITY author "WAZ">
+  <!ENTITY version "2026.08.25.004">
+]>
+
+<PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="file:///boot/config/plugins/waz.health.plg" min="6.12.0" icon="fa-heartbeat">
+<CHANGES>
+### &version; - WAZ Health v0.3.0
+
+- Adds a sticky, full-width health banner below the Unraid navigation.
+- Derives overall health automatically from the worst subsystem state.
+- Adds browser-local time and compact server uptime from /proc/uptime.
+- Adds a stable browser API and JSON endpoint for later health collectors.
+- Uses a local rolling-test update URL and canonical inline manifest layout.
+- Refreshes health state every five seconds without a page reload.
+- Expands a second row with subsystem-specific attention and fault messages.
+- Adds live array, storage, cooling, throttling, and UPS collectors.
+- Removes SERVICES until its future visual configuration is designed.
+</CHANGES>
+
+<!-- Updates replace only the RAM-backed runtime tree. Persistent config remains. -->
+<FILE Run="/bin/bash">
+<INLINE>
+<![CDATA[
+set -e
+
+RUNTIME_DIR="/usr/local/emhttp/plugins/waz.health"
+CONFIG_DIR="/boot/config/plugins/waz.health"
+
+rm -rf "$RUNTIME_DIR"
+mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
+]]>
+</INLINE>
+</FILE>
+
+<FILE Name="/usr/local/emhttp/plugins/waz.health/assets/css/banner.css">
+<INLINE>
+<![CDATA[
+:root {
+  --waz-health-background: color-mix(in srgb, var(--header-background-color, #1c1c1c) 92%, #000);
+  --waz-health-border: color-mix(in srgb, var(--header-text-color, #f2f2f2) 14%, transparent);
+  --waz-health-text: var(--header-text-color, #f2f2f2);
+  --waz-health-muted: color-mix(in srgb, var(--header-text-color, #f2f2f2) 65%, transparent);
+  --waz-health-normal: var(--green-800, #33b864);
+  --waz-health-attention: var(--orange-300, #f2a900);
+  --waz-health-fault: var(--red-600, #e34a4a);
+  --waz-health-unknown: var(--gray-400, #8a8f98);
+}
+
+#waz-health-banner.waz-health {
+  box-sizing: border-box;
+  position: sticky;
+  top: var(--waz-health-sticky-top, 0);
+  z-index: 100;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  height: auto;
+  margin: 0;
+  border-top: 1px solid var(--waz-health-border);
+  border-bottom: 1px solid var(--waz-health-border);
+  background: var(--waz-health-background);
+  color: var(--waz-health-text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+#waz-health-banner .waz-health__inner {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.4vw, 24px);
+  width: 100%;
+  height: 39px;
+  padding: 0 clamp(12px, 2vw, 28px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+
+#waz-health-banner .waz-health__issues {
+  box-sizing: border-box;
+  display: none;
+  align-items: center;
+  gap: clamp(18px, 2.5vw, 36px);
+  min-height: 30px;
+  padding: 5px clamp(12px, 2vw, 28px) 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-top: 1px solid var(--waz-health-border);
+  background: color-mix(in srgb, var(--waz-health-background) 95%, #000);
+  scrollbar-width: thin;
+  white-space: nowrap;
+}
+
+#waz-health-banner.waz-health--expanded .waz-health__issues {
+  display: flex;
+}
+
+#waz-health-banner .waz-health__issue {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--waz-health-muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.035em;
+  text-transform: none;
+}
+
+#waz-health-banner .waz-health__issue strong {
+  color: inherit;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#waz-health-banner .waz-health__inner::-webkit-scrollbar {
+  display: none;
+}
+
+#waz-health-banner .waz-health__identity {
+  flex: 0 0 auto;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+#waz-health-banner .waz-health__overall,
+#waz-health-banner .waz-health__subsystem,
+#waz-health-banner .waz-health__meta,
+#waz-health-banner .waz-health__uptime {
+  display: inline-flex;
+  align-items: center;
+}
+
+#waz-health-banner .waz-health__overall {
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+#waz-health-banner .waz-health__subsystems {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  gap: clamp(10px, 1.35vw, 22px);
+}
+
+#waz-health-banner .waz-health__subsystem {
+  gap: 6px;
+  color: var(--waz-health-muted);
+}
+
+#waz-health-banner .waz-health__divider {
+  flex: 0 0 1px;
+  align-self: stretch;
+  height: 18px;
+  margin: auto 0;
+  background: var(--waz-health-border);
+}
+
+#waz-health-banner .waz-health__dot {
+  box-sizing: border-box;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--waz-health-unknown);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--waz-health-unknown) 16%, transparent);
+}
+
+#waz-health-banner [data-state="normal"] .waz-health__dot {
+  background: var(--waz-health-normal);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--waz-health-normal) 16%, transparent);
+}
+
+#waz-health-banner [data-state="attention"] {
+  color: var(--waz-health-attention);
+}
+
+#waz-health-banner [data-state="attention"] .waz-health__dot {
+  background: var(--waz-health-attention);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--waz-health-attention) 18%, transparent);
+}
+
+#waz-health-banner [data-state="fault"] {
+  color: var(--waz-health-fault);
+}
+
+#waz-health-banner [data-state="fault"] .waz-health__dot {
+  background: var(--waz-health-fault);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--waz-health-fault) 18%, transparent);
+}
+
+#waz-health-banner .waz-health__meta {
+  flex: 0 0 auto;
+  gap: clamp(12px, 1.3vw, 20px);
+  margin-left: auto;
+  color: var(--waz-health-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+#waz-health-banner .waz-health__uptime {
+  gap: 4px;
+}
+
+#waz-health-banner[data-connection="offline"] .waz-health__uptime {
+  opacity: 0.55;
+}
+
+@supports not (color: color-mix(in srgb, white, black)) {
+  :root {
+    --waz-health-background: #1c1c1c;
+    --waz-health-border: #3a3a3a;
+    --waz-health-muted: #a9adb3;
+  }
+}
+
+@media (max-width: 900px) {
+  #waz-health-banner .waz-health__inner {
+    height: 38px;
+  }
+
+  #waz-health-banner .waz-health__divider {
+    display: none;
+  }
+
+  #waz-health-banner .waz-health__subsystems {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 620px) {
+  #waz-health-banner .waz-health__inner {
+    gap: 14px;
+    padding: 0 12px;
+  }
+
+  #waz-health-banner .waz-health__identity {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    margin-left: -12px;
+    padding: 13px 10px 13px 12px;
+    background: var(--waz-health-background);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #waz-health-banner * {
+    scroll-behavior: auto !important;
+  }
+}
+
+]]>
+</INLINE>
+</FILE>
+<FILE Name="/usr/local/emhttp/plugins/waz.health/assets/js/banner.js">
+<INLINE>
+<![CDATA[
+(function () {
+  "use strict";
+
+  if (window.WAZHealth && window.WAZHealth.version) return;
+
+  var config = window.WAZHealthBootstrap || {};
+  var endpoint = config.endpoint || "/plugins/waz.health/include/status.php";
+  var refreshMs = Math.max(3000, Number(config.refreshMs) || 5000);
+  var allowedStates = ["normal", "attention", "fault", "unknown"];
+  var subsystemOrder = ["array", "storage", "cooling", "ups"];
+  var state = {
+    server: { label: "WAZ-SERVER", uptimeSeconds: null },
+    overall: { label: "SYSTEM NORMAL", state: "normal", message: "" },
+    subsystems: {},
+    uptimeSampledAt: Date.now()
+  };
+  var banner = null;
+  var refreshTimer = null;
+  var clockTimer = null;
+  var resizeObserver = null;
+
+  function normalizeState(value) {
+    value = String(value || "unknown").toLowerCase();
+    return allowedStates.indexOf(value) >= 0 ? value : "unknown";
+  }
+
+  function escapeText(value) {
+    return String(value == null ? "" : value);
+  }
+
+  function formatUptime(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) return "—";
+    var totalMinutes = Math.floor(seconds / 60);
+    var days = Math.floor(totalMinutes / 1440);
+    var hours = Math.floor((totalMinutes % 1440) / 60);
+    var minutes = totalMinutes % 60;
+    if (days > 0) return days + "d " + hours + "h";
+    if (hours > 0) return hours + "h " + minutes + "m";
+    return minutes + "m";
+  }
+
+  function localTime() {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit"
+    }).format(new Date());
+  }
+
+  function createIndicator(key, label) {
+    var item = document.createElement("span");
+    item.className = "waz-health__subsystem";
+    item.dataset.subsystem = key;
+
+    var name = document.createElement("span");
+    name.className = "waz-health__subsystem-label";
+    name.textContent = label;
+
+    var dot = document.createElement("span");
+    dot.className = "waz-health__dot";
+    dot.setAttribute("aria-hidden", "true");
+
+    item.appendChild(name);
+    item.appendChild(dot);
+    return item;
+  }
+
+  function createBanner() {
+    var root = document.createElement("section");
+    root.id = "waz-health-banner";
+    root.className = "waz-health";
+    root.setAttribute("role", "status");
+    root.setAttribute("aria-live", "polite");
+    root.setAttribute("aria-label", "WAZ server health");
+
+    var inner = document.createElement("div");
+    inner.className = "waz-health__inner";
+
+    var identity = document.createElement("span");
+    identity.className = "waz-health__identity";
+    identity.dataset.field = "server";
+
+    var overall = document.createElement("span");
+    overall.className = "waz-health__overall";
+    overall.innerHTML = '<span class="waz-health__dot" aria-hidden="true"></span><span data-field="overall">SYSTEM NORMAL</span>';
+
+    var dividerOne = document.createElement("span");
+    dividerOne.className = "waz-health__divider";
+    dividerOne.setAttribute("aria-hidden", "true");
+
+    var subsystems = document.createElement("span");
+    subsystems.className = "waz-health__subsystems";
+    subsystemOrder.forEach(function (key) {
+      subsystems.appendChild(createIndicator(key, key.toUpperCase()));
+    });
+
+    var dividerTwo = dividerOne.cloneNode(true);
+
+    var meta = document.createElement("span");
+    meta.className = "waz-health__meta";
+    meta.innerHTML = '<time class="waz-health__time" data-field="time"></time><span class="waz-health__uptime"><span aria-hidden="true">↑</span><span data-field="uptime">—</span></span>';
+
+    inner.appendChild(identity);
+    inner.appendChild(overall);
+    inner.appendChild(dividerOne);
+    inner.appendChild(subsystems);
+    inner.appendChild(dividerTwo);
+    inner.appendChild(meta);
+    root.appendChild(inner);
+
+    var issues = document.createElement("div");
+    issues.className = "waz-health__issues";
+    issues.dataset.field = "issues";
+    issues.setAttribute("aria-label", "Active health details");
+    root.appendChild(issues);
+    return root;
+  }
+
+  function renderIssues() {
+    if (!banner) return;
+    var issuesNode = banner.querySelector('[data-field="issues"]');
+    if (!issuesNode) return;
+
+    var activeIssues = [];
+    subsystemOrder.forEach(function (key) {
+      var value = state.subsystems[key] || {};
+      var issueState = normalizeState(value.state);
+      if (issueState !== "attention" && issueState !== "fault") return;
+      activeIssues.push({
+        label: value.label || key.toUpperCase(),
+        state: issueState,
+        message: value.message || ((value.label || key.toUpperCase()) + " reported " + issueState)
+      });
+    });
+
+    var overallState = normalizeState(state.overall.state);
+    if (!activeIssues.length && (overallState === "attention" || overallState === "fault")) {
+      activeIssues.push({
+        label: state.overall.label || "SYSTEM",
+        state: overallState,
+        message: state.overall.message || "System health requires attention"
+      });
+    }
+
+    activeIssues.sort(function (left, right) {
+      var rank = { fault: 2, attention: 1 };
+      return (rank[right.state] || 0) - (rank[left.state] || 0);
+    });
+
+    issuesNode.replaceChildren();
+    activeIssues.forEach(function (issue) {
+      var item = document.createElement("span");
+      item.className = "waz-health__issue";
+      item.dataset.state = issue.state;
+
+      var dot = document.createElement("span");
+      dot.className = "waz-health__dot";
+      dot.setAttribute("aria-hidden", "true");
+
+      var label = document.createElement("strong");
+      label.textContent = issue.label;
+
+      var message = document.createElement("span");
+      message.textContent = issue.message;
+
+      item.appendChild(dot);
+      item.appendChild(label);
+      item.appendChild(message);
+      issuesNode.appendChild(item);
+    });
+
+    banner.classList.toggle("waz-health--expanded", activeIssues.length > 0);
+  }
+
+  function updateClockAndUptime() {
+    if (!banner) return;
+    var timeNode = banner.querySelector('[data-field="time"]');
+    var uptimeNode = banner.querySelector('[data-field="uptime"]');
+    if (timeNode) {
+      timeNode.textContent = localTime();
+      timeNode.setAttribute("datetime", new Date().toISOString());
+    }
+    if (uptimeNode) {
+      var elapsed = Math.max(0, (Date.now() - state.uptimeSampledAt) / 1000);
+      var seconds = Number(state.server.uptimeSeconds);
+      uptimeNode.textContent = formatUptime(Number.isFinite(seconds) ? seconds + elapsed : NaN);
+    }
+  }
+
+  function render() {
+    if (!banner) return;
+    var serverNode = banner.querySelector('[data-field="server"]');
+    var overallNode = banner.querySelector('[data-field="overall"]');
+    var overall = banner.querySelector(".waz-health__overall");
+
+    if (serverNode) serverNode.textContent = escapeText(state.server.label || "WAZ-SERVER");
+    if (overallNode) overallNode.textContent = escapeText(state.overall.label || "STATUS UNKNOWN");
+    if (overall) overall.dataset.state = normalizeState(state.overall.state);
+
+    subsystemOrder.forEach(function (key) {
+      var item = banner.querySelector('[data-subsystem="' + key + '"]');
+      var value = state.subsystems[key] || { label: key.toUpperCase(), state: "unknown" };
+      if (!item) return;
+      item.dataset.state = normalizeState(value.state);
+      var label = item.querySelector(".waz-health__subsystem-label");
+      if (label) label.textContent = escapeText(value.label || key.toUpperCase());
+      item.setAttribute("aria-label", (value.label || key) + ": " + normalizeState(value.state));
+    });
+
+    renderIssues();
+    updateClockAndUptime();
+  }
+
+  function mergeSnapshot(next) {
+    if (!next || typeof next !== "object") return;
+    if (next.server && typeof next.server === "object") {
+      state.server = Object.assign({}, state.server, next.server);
+      if (next.server.uptimeSeconds != null) state.uptimeSampledAt = Date.now();
+    }
+    if (next.overall && typeof next.overall === "object") {
+      state.overall = Object.assign({}, state.overall, next.overall);
+    }
+    if (next.subsystems && typeof next.subsystems === "object") {
+      state.subsystems = Object.assign({}, state.subsystems, next.subsystems);
+    }
+    render();
+  }
+
+  function refresh() {
+    return fetch(endpoint, {
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { Accept: "application/json" }
+    })
+      .then(function (response) {
+        if (!response.ok) throw new Error("WAZ Health endpoint returned " + response.status);
+        return response.json();
+      })
+      .then(function (snapshot) {
+        mergeSnapshot(snapshot);
+        if (banner) banner.dataset.connection = "online";
+        return snapshot;
+      })
+      .catch(function (error) {
+        if (banner) banner.dataset.connection = "offline";
+        if (window.console && console.debug) console.debug("WAZ Health refresh failed", error);
+        return null;
+      });
+  }
+
+  function updateStickyOffset(menu) {
+    if (!banner || !menu) return;
+    var style = window.getComputedStyle(menu);
+    var navIsTopSticky = style.position === "sticky" && document.documentElement.classList.contains("Theme--nav-top");
+    banner.style.setProperty("--waz-health-sticky-top", navIsTopSticky ? menu.offsetHeight + "px" : "0px");
+  }
+
+  function mount() {
+    if (document.getElementById("waz-health-banner")) {
+      banner = document.getElementById("waz-health-banner");
+      return;
+    }
+
+    var menu = document.getElementById("menu");
+    var display = document.getElementById("displaybox");
+    banner = createBanner();
+
+    if (menu && menu.parentNode) {
+      menu.insertAdjacentElement("afterend", banner);
+      updateStickyOffset(menu);
+      if (window.ResizeObserver) {
+        resizeObserver = new ResizeObserver(function () { updateStickyOffset(menu); });
+        resizeObserver.observe(menu);
+      } else {
+        window.addEventListener("resize", function () { updateStickyOffset(menu); });
+      }
+    } else if (display && display.parentNode) {
+      display.parentNode.insertBefore(banner, display);
+    } else {
+      document.body.insertBefore(banner, document.body.firstChild);
+    }
+
+    render();
+    refresh();
+    refreshTimer = window.setInterval(refresh, refreshMs);
+    clockTimer = window.setInterval(updateClockAndUptime, 60000);
+  }
+
+  window.WAZHealth = {
+    version: "0.3.0",
+    refresh: refresh,
+    setState: function (next) {
+      mergeSnapshot(next);
+      return JSON.parse(JSON.stringify(state));
+    },
+    getState: function () {
+      return JSON.parse(JSON.stringify(state));
+    },
+    destroy: function () {
+      if (refreshTimer) window.clearInterval(refreshTimer);
+      if (clockTimer) window.clearInterval(clockTimer);
+      if (resizeObserver) resizeObserver.disconnect();
+      if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
+      banner = null;
+    }
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", mount, { once: true });
+  } else {
+    mount();
+  }
+})();
+
+]]>
+</INLINE>
+</FILE>
+<FILE Name="/usr/local/emhttp/plugins/waz.health/assets/README.md">
+<INLINE>
+<![CDATA[
+# Assets
+
+Static browser assets for WAZ Health live here. Keep future images, icons, or
+fonts under this directory so updates remain isolated from Unraid core files.
+
+]]>
+</INLINE>
+</FILE>
+<FILE Name="/usr/local/emhttp/plugins/waz.health/include/health.php">
+<INLINE>
+<![CDATA[
+<?php
+
+declare(strict_types=1);
+
+function waz_health_allowed_state(string $state): string
+{
+    $state = strtolower(trim($state));
+    return in_array($state, ['normal', 'attention', 'fault', 'unknown'], true)
+        ? $state
+        : 'unknown';
+}
+
+function waz_health_state_rank(string $state): int
+{
+    $ranks = ['normal' => 0, 'unknown' => 1, 'attention' => 2, 'fault' => 3];
+    return $ranks[waz_health_allowed_state($state)] ?? 1;
+}
+
+function waz_health_read_config(): array
+{
+    $defaults = [
+        'DISPLAY_NAME' => 'WAZ-SERVER',
+        'OVERALL_STATE' => 'normal',
+        'OVERALL_MESSAGE' => '',
+        'ARRAY_STATE' => 'normal',
+        'ARRAY_MESSAGE' => '',
+        'STORAGE_STATE' => 'normal',
+        'STORAGE_MESSAGE' => '',
+        'COOLING_STATE' => 'normal',
+        'COOLING_MESSAGE' => '',
+        'UPS_STATE' => 'normal',
+        'UPS_MESSAGE' => '',
+        'STORAGE_WARN_PERCENT' => '95',
+        'STORAGE_FAULT_PERCENT' => '98',
+        'CPU_WARN_C' => '60',
+        'CPU_FAULT_C' => '70',
+        'COOLANT_WARN_C' => '35',
+        'COOLANT_FAULT_C' => '40',
+        'FLOW_WARN_LPH' => '130',
+        'FLOW_FAULT_LPH' => '120',
+        'THROTTLE_LATCH_SECONDS' => '300',
+        'UPS_LOAD_WARN_PERCENT' => '90',
+        'UPS_LOAD_FAULT_PERCENT' => '100',
+    ];
+
+    $path = '/boot/config/plugins/waz.health/waz.health.cfg';
+    $configured = is_file($path) ? @parse_ini_file($path, false, INI_SCANNER_RAW) : [];
+    return array_merge($defaults, is_array($configured) ? $configured : []);
+}
+
+function waz_health_config_number(array $config, string $key, float $fallback): float
+{
+    $value = $config[$key] ?? null;
+    return is_numeric($value) ? (float) $value : $fallback;
+}
+
+function waz_health_read_number(string $path): ?float
+{
+    $raw = @file_get_contents($path);
+    if ($raw === false || !is_numeric(trim($raw))) {
+        return null;
+    }
+    return (float) trim($raw);
+}
+
+function waz_health_first_number($value): ?float
+{
+    if (is_numeric($value)) {
+        return (float) $value;
+    }
+    if (preg_match('/-?[0-9]+(?:\.[0-9]+)?/', (string) $value, $matches)) {
+        return (float) $matches[0];
+    }
+    return null;
+}
+
+function waz_health_format_number(float $value, int $decimals = 1): string
+{
+    if ($decimals <= 0) {
+        return number_format($value, 0, '.', '');
+    }
+    return rtrim(rtrim(number_format($value, $decimals, '.', ''), '0'), '.');
+}
+
+function waz_health_uptime_seconds(): ?int
+{
+    $raw = @file_get_contents('/proc/uptime');
+    if ($raw === false) {
+        return null;
+    }
+    $firstField = strtok(trim($raw), " \t");
+    return $firstField !== false && is_numeric($firstField)
+        ? max(0, (int) floor((float) $firstField))
+        : null;
+}
+
+function waz_health_status_from_config(array $config, string $name): array
+{
+    $prefix = strtoupper($name);
+    return [
+        'label' => $prefix,
+        'state' => waz_health_allowed_state((string) ($config[$prefix . '_STATE'] ?? 'normal')),
+        'message' => trim((string) ($config[$prefix . '_MESSAGE'] ?? '')),
+    ];
+}
+
+function waz_health_merge_status(array $configured, array $detected): array
+{
+    $configuredRank = waz_health_state_rank((string) ($configured['state'] ?? 'normal'));
+    $detectedRank = waz_health_state_rank((string) ($detected['state'] ?? 'normal'));
+    if ($detectedRank > $configuredRank) {
+        $result = $detected;
+    } elseif ($configuredRank > $detectedRank) {
+        $result = $configured;
+    } else {
+        $result = $detected;
+        $messages = array_values(array_unique(array_filter([
+            trim((string) ($configured['message'] ?? '')),
+            trim((string) ($detected['message'] ?? '')),
+        ])));
+        $result['message'] = implode(' · ', $messages);
+    }
+    $result['label'] = $configured['label'] ?? $detected['label'] ?? '';
+    if (isset($detected['metrics'])) {
+        $result['metrics'] = $detected['metrics'];
+    }
+    return $result;
+}
+
+function waz_health_array_status(): array
+{
+    $result = ['label' => 'ARRAY', 'state' => 'normal', 'message' => ''];
+    $values = is_file('/var/local/emhttp/var.ini')
+        ? @parse_ini_file('/var/local/emhttp/var.ini', false, INI_SCANNER_RAW)
+        : [];
+    if (!is_array($values) || !$values) {
+        return $result;
+    }
+
+    $values = array_change_key_case($values, CASE_LOWER);
+    $issues = [];
+    $state = strtoupper(trim((string) ($values['mdstate'] ?? '')));
+    if ($state !== '' && $state !== 'STARTED') {
+        $issues[] = $state === 'STOPPED' ? 'Array stopped' : 'Array state ' . strtolower($state);
+    }
+    foreach (['mdnummissing' => 'missing', 'mdnumdisabled' => 'disabled', 'mdnuminvalid' => 'invalid'] as $key => $label) {
+        $count = isset($values[$key]) && is_numeric($values[$key]) ? (int) $values[$key] : 0;
+        if ($count > 0) {
+            $issues[] = $count . ' ' . $label . ' disk' . ($count === 1 ? '' : 's');
+        }
+    }
+    $syncErrors = isset($values['mdsyncerrs']) && is_numeric($values['mdsyncerrs'])
+        ? (int) $values['mdsyncerrs']
+        : 0;
+    if ($syncErrors > 0) {
+        $issues[] = $syncErrors . ' parity error' . ($syncErrors === 1 ? '' : 's');
+    }
+    if ($issues) {
+        $result['state'] = 'fault';
+        $result['message'] = implode(' · ', $issues);
+    }
+    return $result;
+}
+
+function waz_health_storage_label(string $section, array $disk): string
+{
+    $name = trim((string) ($disk['name'] ?? $section));
+    if (preg_match('/^disk(\d+)$/i', $name, $matches)) {
+        return 'Disk ' . $matches[1];
+    }
+    return ucwords(str_replace(['-', '_'], ' ', $name));
+}
+
+function waz_health_storage_status(array $config): array
+{
+    $warn = waz_health_config_number($config, 'STORAGE_WARN_PERCENT', 95.0);
+    $fault = waz_health_config_number($config, 'STORAGE_FAULT_PERCENT', 98.0);
+    $result = [
+        'label' => 'STORAGE',
+        'state' => 'normal',
+        'message' => '',
+        'metrics' => ['highestUsagePercent' => null],
+    ];
+    $disks = is_file('/var/local/emhttp/disks.ini')
+        ? @parse_ini_file('/var/local/emhttp/disks.ini', true, INI_SCANNER_RAW)
+        : [];
+    if (!is_array($disks)) {
+        return $result;
+    }
+
+    $issues = [];
+    $highestUsage = null;
+    foreach ($disks as $section => $disk) {
+        if (!is_array($disk)) {
+            continue;
+        }
+        $sizeRaw = str_replace(',', '', (string) ($disk['fsSize'] ?? ''));
+        $freeRaw = str_replace(',', '', (string) ($disk['fsFree'] ?? ''));
+        if (!is_numeric($sizeRaw) || !is_numeric($freeRaw) || (float) $sizeRaw <= 0.0) {
+            continue;
+        }
+        $size = (float) $sizeRaw;
+        $free = max(0.0, (float) $freeRaw);
+        $usage = max(0.0, min(100.0, (($size - $free) / $size) * 100.0));
+        $highestUsage = $highestUsage === null ? $usage : max($highestUsage, $usage);
+        if ($usage < $warn) {
+            continue;
+        }
+        $issueState = $usage >= $fault ? 'fault' : 'attention';
+        $threshold = $issueState === 'fault' ? $fault : $warn;
+        $issues[] = [
+            'state' => $issueState,
+            'usage' => $usage,
+            'message' => waz_health_storage_label((string) $section, $disk)
+                . ' ' . waz_health_format_number($usage) . '% full / '
+                . waz_health_format_number($threshold, 0) . '% '
+                . ($issueState === 'fault' ? 'fault' : 'warn'),
+        ];
+    }
+    $result['metrics']['highestUsagePercent'] = $highestUsage === null ? null : round($highestUsage, 1);
+    usort($issues, static function (array $left, array $right): int {
+        $rank = waz_health_state_rank($right['state']) <=> waz_health_state_rank($left['state']);
+        return $rank !== 0 ? $rank : ($right['usage'] <=> $left['usage']);
+    });
+    if ($issues) {
+        $result['state'] = $issues[0]['state'];
+        $shown = array_slice($issues, 0, 3);
+        $messages = array_column($shown, 'message');
+        if (count($issues) > count($shown)) {
+            $messages[] = '+' . (count($issues) - count($shown)) . ' more';
+        }
+        $result['message'] = implode(' · ', $messages);
+    }
+    return $result;
+}
+
+function waz_health_hwmon_directories(string $deviceName): array
+{
+    $matches = [];
+    foreach (glob('/sys/class/hwmon/hwmon*') ?: [] as $directory) {
+        $name = @file_get_contents($directory . '/name');
+        if ($name !== false && strtolower(trim($name)) === strtolower($deviceName)) {
+            $matches[] = $directory;
+        }
+    }
+    return $matches;
+}
+
+function waz_health_hwmon_labeled_value(string $deviceName, string $kind, array $wantedLabels, float $divisor): ?float
+{
+    $wantedLabels = array_map('strtolower', $wantedLabels);
+    foreach (waz_health_hwmon_directories($deviceName) as $directory) {
+        foreach (glob($directory . '/' . $kind . '*_input') ?: [] as $inputPath) {
+            $prefix = substr($inputPath, 0, -strlen('_input'));
+            $label = @file_get_contents($prefix . '_label');
+            if ($label === false || !in_array(strtolower(trim($label)), $wantedLabels, true)) {
+                continue;
+            }
+            $value = waz_health_read_number($inputPath);
+            if ($value !== null) {
+                return $value / $divisor;
+            }
+        }
+    }
+    return null;
+}
+
+function waz_health_cpu_temperature(): ?float
+{
+    $temperature = waz_health_hwmon_labeled_value('coretemp', 'temp', ['Package id 0', 'CPU Temp'], 1000.0);
+    if ($temperature !== null) {
+        return $temperature;
+    }
+    foreach (waz_health_hwmon_directories('coretemp') as $directory) {
+        $fallback = waz_health_read_number($directory . '/temp1_input');
+        if ($fallback !== null) {
+            return $fallback / 1000.0;
+        }
+    }
+    return null;
+}
+
+function waz_health_throttle_status(int $latchSeconds): array
+{
+    $base = '/sys/devices/system/cpu/cpu0/thermal_throttle/';
+    $current = [
+        'packageCount' => waz_health_read_number($base . 'package_throttle_count'),
+        'packageTimeMs' => waz_health_read_number($base . 'package_throttle_total_time_ms'),
+        'coreCount' => waz_health_read_number($base . 'core_throttle_count'),
+        'coreTimeMs' => waz_health_read_number($base . 'core_throttle_total_time_ms'),
+    ];
+    if ($current['packageCount'] === null && $current['coreCount'] === null) {
+        return ['active' => false, 'lastEventAt' => null];
+    }
+
+    $handle = @fopen('/var/tmp/waz-health-throttle-state.json', 'c+');
+    if ($handle === false || !@flock($handle, LOCK_EX)) {
+        if (is_resource($handle)) {
+            @fclose($handle);
+        }
+        return ['active' => false, 'lastEventAt' => null];
+    }
+    $raw = stream_get_contents($handle);
+    $previous = $raw !== false && trim($raw) !== '' ? json_decode($raw, true) : null;
+    $now = time();
+    $lastEventAt = is_array($previous) && isset($previous['lastEventAt'])
+        ? (int) $previous['lastEventAt']
+        : null;
+    $increased = false;
+    if (is_array($previous) && isset($previous['counters']) && is_array($previous['counters'])) {
+        foreach ($current as $key => $value) {
+            $old = $previous['counters'][$key] ?? null;
+            if ($value !== null && is_numeric($old) && $value > (float) $old) {
+                $increased = true;
+            }
+        }
+    }
+    if ($increased) {
+        $lastEventAt = $now;
+    }
+    $encoded = json_encode(['counters' => $current, 'lastEventAt' => $lastEventAt], JSON_UNESCAPED_SLASHES);
+    rewind($handle);
+    ftruncate($handle, 0);
+    if ($encoded !== false) {
+        fwrite($handle, $encoded);
+    }
+    fflush($handle);
+    flock($handle, LOCK_UN);
+    fclose($handle);
+    return [
+        'active' => $lastEventAt !== null && ($now - $lastEventAt) < max(1, $latchSeconds),
+        'lastEventAt' => $lastEventAt,
+    ];
+}
+
+function waz_health_cooling_status(array $config): array
+{
+    $cpu = waz_health_cpu_temperature();
+    $coolant = waz_health_hwmon_labeled_value('highflownext', 'temp', ['Coolant temp'], 1000.0);
+    // The high flow NEXT hwmon driver exposes flow as fan input in dL/h.
+    $flow = waz_health_hwmon_labeled_value('highflownext', 'fan', ['Flow [dL/h]'], 10.0);
+    $throttle = waz_health_throttle_status((int) waz_health_config_number($config, 'THROTTLE_LATCH_SECONDS', 300.0));
+    $issues = [];
+    if ($throttle['active']) {
+        $age = max(0, time() - (int) $throttle['lastEventAt']);
+        $issues[] = [
+            'state' => 'fault',
+            'priority' => 0,
+            'message' => 'CPU thermal throttling detected ' . ($age < 5 ? 'now' : $age . 's ago'),
+        ];
+    }
+    foreach ([
+        ['CPU', $cpu, 'CPU_WARN_C', 60.0, 'CPU_FAULT_C', 70.0, 1],
+        ['Coolant', $coolant, 'COOLANT_WARN_C', 35.0, 'COOLANT_FAULT_C', 40.0, 2],
+    ] as $check) {
+        [$label, $value, $warnKey, $warnDefault, $faultKey, $faultDefault, $priority] = $check;
+        $warn = waz_health_config_number($config, $warnKey, $warnDefault);
+        $fault = waz_health_config_number($config, $faultKey, $faultDefault);
+        if ($value === null || $value < $warn) {
+            continue;
+        }
+        $issueState = $value >= $fault ? 'fault' : 'attention';
+        $threshold = $issueState === 'fault' ? $fault : $warn;
+        $issues[] = [
+            'state' => $issueState,
+            'priority' => $priority,
+            'message' => $label . ' ' . waz_health_format_number($value) . '°C / '
+                . waz_health_format_number($threshold, 0) . '°C '
+                . ($issueState === 'fault' ? 'fault' : 'warn'),
+        ];
+    }
+    $flowWarn = waz_health_config_number($config, 'FLOW_WARN_LPH', 130.0);
+    $flowFault = waz_health_config_number($config, 'FLOW_FAULT_LPH', 120.0);
+    if ($flow !== null && $flow <= $flowWarn) {
+        $issueState = $flow <= $flowFault ? 'fault' : 'attention';
+        $threshold = $issueState === 'fault' ? $flowFault : $flowWarn;
+        $issues[] = [
+            'state' => $issueState,
+            'priority' => 3,
+            'message' => 'Flow ' . waz_health_format_number($flow) . ' L/hr / '
+                . waz_health_format_number($threshold, 0) . ' L/hr '
+                . ($issueState === 'fault' ? 'fault' : 'warn'),
+        ];
+    }
+    usort($issues, static function (array $left, array $right): int {
+        $rank = waz_health_state_rank($right['state']) <=> waz_health_state_rank($left['state']);
+        return $rank !== 0 ? $rank : ($left['priority'] <=> $right['priority']);
+    });
+    return [
+        'label' => 'COOLING',
+        'state' => $issues ? $issues[0]['state'] : 'normal',
+        'message' => $issues ? implode(' · ', array_column($issues, 'message')) : '',
+        'metrics' => [
+            'cpuTempC' => $cpu === null ? null : round($cpu, 1),
+            'coolantTempC' => $coolant === null ? null : round($coolant, 1),
+            'flowLph' => $flow === null ? null : round($flow, 1),
+            'thermalThrottleLatched' => (bool) $throttle['active'],
+        ],
+    ];
+}
+
+function waz_health_find_executable(array $paths): ?string
+{
+    foreach ($paths as $path) {
+        if (is_file($path) && is_executable($path)) {
+            return $path;
+        }
+    }
+    return null;
+}
+
+function waz_health_run_command(string $command): ?array
+{
+    $lines = [];
+    $exitCode = 1;
+    @exec($command . ' 2>/dev/null', $lines, $exitCode);
+    return $exitCode === 0 ? $lines : null;
+}
+
+function waz_health_read_ups_data(): ?array
+{
+    $upsc = waz_health_find_executable(['/usr/bin/upsc', '/usr/sbin/upsc', '/sbin/upsc']);
+    if ($upsc !== null) {
+        $names = waz_health_run_command(escapeshellarg($upsc) . ' -l');
+        $name = is_array($names) ? trim((string) ($names[0] ?? '')) : '';
+        if ($name !== '') {
+            $lines = waz_health_run_command(escapeshellarg($upsc) . ' ' . escapeshellarg($name));
+            if (is_array($lines)) {
+                $data = ['source' => 'nut', 'name' => $name];
+                foreach ($lines as $line) {
+                    if (preg_match('/^([^:]+):\s*(.*)$/', $line, $matches)) {
+                        $data[trim($matches[1])] = trim($matches[2]);
+                    }
+                }
+                return $data;
+            }
+        }
+    }
+
+    $apcaccess = waz_health_find_executable(['/sbin/apcaccess', '/usr/sbin/apcaccess', '/usr/bin/apcaccess']);
+    if ($apcaccess !== null) {
+        $lines = waz_health_run_command(escapeshellarg($apcaccess) . ' status');
+        if (is_array($lines) && $lines) {
+            $data = ['source' => 'apcupsd'];
+            foreach ($lines as $line) {
+                if (preg_match('/^([^:]+):\s*(.*)$/', $line, $matches)) {
+                    $data[strtoupper(trim($matches[1]))] = trim($matches[2]);
+                }
+            }
+            return $data;
+        }
+    }
+    return null;
+}
+
+function waz_health_ups_status(array $config): array
+{
+    $data = waz_health_read_ups_data();
+    $result = [
+        'label' => 'UPS',
+        'state' => 'normal',
+        'message' => '',
+        'metrics' => ['available' => false],
+    ];
+    if ($data === null) {
+        return $result;
+    }
+
+    $isNut = ($data['source'] ?? '') === 'nut';
+    $status = strtoupper((string) ($isNut ? ($data['ups.status'] ?? '') : ($data['STATUS'] ?? '')));
+    $charge = waz_health_first_number($isNut ? ($data['battery.charge'] ?? null) : ($data['BCHARGE'] ?? null));
+    $runtimeSeconds = $isNut
+        ? waz_health_first_number($data['battery.runtime'] ?? null)
+        : (($minutes = waz_health_first_number($data['TIMELEFT'] ?? null)) === null ? null : $minutes * 60.0);
+    $load = waz_health_first_number($isNut ? ($data['ups.load'] ?? null) : ($data['LOADPCT'] ?? null));
+    $model = trim((string) ($isNut ? ($data['ups.model'] ?? '') : ($data['MODEL'] ?? '')));
+    $tokens = preg_split('/[\s,]+/', $status, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $faultTokens = ['LB', 'RB', 'OVER', 'FSD', 'OFF', 'COMMLOST', 'LOWBATT', 'REPLACEBATT', 'OVERLOAD'];
+    $attentionTokens = ['OB', 'CAL', 'TRIM', 'BOOST', 'BYPASS', 'ONBATT'];
+    $issues = [];
+
+    foreach ($faultTokens as $token) {
+        if (in_array($token, $tokens, true) || strpos($status, $token) !== false) {
+            $labels = [
+                'LB' => 'Low battery', 'LOWBATT' => 'Low battery',
+                'RB' => 'Replace battery', 'REPLACEBATT' => 'Replace battery',
+                'OVER' => 'UPS overload', 'OVERLOAD' => 'UPS overload',
+                'COMMLOST' => 'UPS communication lost',
+                'FSD' => 'Forced shutdown active', 'OFF' => 'UPS output off',
+            ];
+            $issues[] = ['state' => 'fault', 'message' => $labels[$token] ?? $token];
+        }
+    }
+    if (!$issues) {
+        foreach ($attentionTokens as $token) {
+            if (in_array($token, $tokens, true) || strpos($status, $token) !== false) {
+                $issues[] = [
+                    'state' => 'attention',
+                    'message' => in_array($token, ['OB', 'ONBATT'], true) ? 'On battery' : 'UPS ' . strtolower($token),
+                ];
+                break;
+            }
+        }
+    }
+
+    $loadWarn = waz_health_config_number($config, 'UPS_LOAD_WARN_PERCENT', 90.0);
+    $loadFault = waz_health_config_number($config, 'UPS_LOAD_FAULT_PERCENT', 100.0);
+    if ($load !== null && $load >= $loadWarn) {
+        $issueState = $load >= $loadFault ? 'fault' : 'attention';
+        $issues[] = [
+            'state' => $issueState,
+            'message' => 'Load ' . waz_health_format_number($load) . '% / '
+                . waz_health_format_number($issueState === 'fault' ? $loadFault : $loadWarn, 0) . '% '
+                . ($issueState === 'fault' ? 'fault' : 'warn'),
+        ];
+    }
+
+    if ($issues) {
+        usort($issues, static function (array $left, array $right): int {
+            return waz_health_state_rank($right['state']) <=> waz_health_state_rank($left['state']);
+        });
+        $details = [];
+        if ($charge !== null) {
+            $details[] = waz_health_format_number($charge, 0) . '% charge';
+        }
+        if ($runtimeSeconds !== null) {
+            $details[] = waz_health_format_number($runtimeSeconds / 60.0, 0) . 'm runtime';
+        }
+        $messages = array_values(array_unique(array_column($issues, 'message')));
+        $result['state'] = $issues[0]['state'];
+        $result['message'] = implode(' · ', array_merge($messages, $details));
+    }
+    $result['metrics'] = [
+        'available' => true,
+        'source' => $data['source'] ?? null,
+        'model' => $model !== '' ? $model : null,
+        'status' => $status !== '' ? $status : null,
+        'chargePercent' => $charge,
+        'runtimeSeconds' => $runtimeSeconds,
+        'loadPercent' => $load,
+    ];
+    return $result;
+}
+
+function waz_health_overall_status(array $config, array $subsystems): array
+{
+    $state = waz_health_allowed_state((string) ($config['OVERALL_STATE'] ?? 'normal'));
+    $message = trim((string) ($config['OVERALL_MESSAGE'] ?? ''));
+    foreach ($subsystems as $subsystem) {
+        if (waz_health_state_rank((string) $subsystem['state']) > waz_health_state_rank($state)) {
+            $state = (string) $subsystem['state'];
+            $message = '';
+        }
+    }
+    $labels = [
+        'normal' => 'SYSTEM NORMAL',
+        'attention' => 'ATTENTION',
+        'fault' => 'FAULT',
+        'unknown' => 'STATUS UNKNOWN',
+    ];
+    return ['label' => $labels[$state] ?? 'STATUS UNKNOWN', 'state' => $state, 'message' => $message];
+}
+
+function waz_health_snapshot(): array
+{
+    $config = waz_health_read_config();
+    $subsystems = [
+        'array' => waz_health_merge_status(waz_health_status_from_config($config, 'array'), waz_health_array_status()),
+        'storage' => waz_health_merge_status(waz_health_status_from_config($config, 'storage'), waz_health_storage_status($config)),
+        'cooling' => waz_health_merge_status(waz_health_status_from_config($config, 'cooling'), waz_health_cooling_status($config)),
+        'ups' => waz_health_merge_status(waz_health_status_from_config($config, 'ups'), waz_health_ups_status($config)),
+    ];
+    return [
+        'schemaVersion' => 2,
+        'pluginVersion' => '0.3.0',
+        'server' => [
+            'label' => trim((string) $config['DISPLAY_NAME']) ?: 'WAZ-SERVER',
+            'uptimeSeconds' => waz_health_uptime_seconds(),
+        ],
+        'overall' => waz_health_overall_status($config, $subsystems),
+        'subsystems' => $subsystems,
+        'generatedAt' => time(),
+    ];
+}
+
+]]>
+</INLINE>
+</FILE>
+<FILE Name="/usr/local/emhttp/plugins/waz.health/include/status.php">
+<INLINE>
+<![CDATA[
+<?php
+
+declare(strict_types=1);
+
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+
+require_once __DIR__ . '/health.php';
+
+try {
+    echo json_encode(waz_health_snapshot(), JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+} catch (Throwable $error) {
+    http_response_code(500);
+    echo json_encode([
+        'schemaVersion' => 1,
+        'error' => 'Unable to read WAZ Health status',
+    ], JSON_UNESCAPED_SLASHES);
+}
+
+]]>
+</INLINE>
+</FILE>
+<FILE Name="/usr/local/emhttp/plugins/waz.health/WazHealthBanner.page">
+<INLINE>
+<![CDATA[
+Menu="Buttons:98"
+Link="nav-user"
+---
+<?php
+$pluginRoot = '/usr/local/emhttp/plugins/waz.health';
+$webRoot = '/plugins/waz.health';
+$cssFile = $pluginRoot . '/assets/css/banner.css';
+$jsFile = $pluginRoot . '/assets/js/banner.js';
+
+$cssVersion = is_file($cssFile) ? filemtime($cssFile) : 0;
+$jsVersion = is_file($jsFile) ? filemtime($jsFile) : 0;
+?>
+<link rel="stylesheet" href="<?=$webRoot?>/assets/css/banner.css?v=<?=$cssVersion?>">
+<script>
+window.WAZHealthBootstrap = <?=json_encode([
+    'endpoint' => $webRoot . '/include/status.php',
+    'refreshMs' => 5000,
+], JSON_UNESCAPED_SLASHES)?>;
+</script>
+<script defer src="<?=$webRoot?>/assets/js/banner.js?v=<?=$jsVersion?>"></script>
+
+]]>
+</INLINE>
+</FILE>
+
+<!-- Create defaults only on first install so rolling updates preserve settings. -->
+<FILE Run="/bin/bash">
+<INLINE>
+<![CDATA[
+set -e
+
+CONFIG_DIR="/boot/config/plugins/waz.health"
+CONFIG_FILE="$CONFIG_DIR/waz.health.cfg"
+
+php -l "/usr/local/emhttp/plugins/waz.health/include/health.php" >/dev/null
+php -l "/usr/local/emhttp/plugins/waz.health/include/status.php" >/dev/null
+
+if [ ! -f "$CONFIG_FILE" ]; then
+  cat > "$CONFIG_FILE" <<'WAZ_CONFIG'
+DISPLAY_NAME="WAZ-SERVER"
+OVERALL_STATE="normal"
+OVERALL_LABEL="SYSTEM NORMAL"
+OVERALL_MESSAGE=""
+ARRAY_STATE="normal"
+ARRAY_MESSAGE=""
+STORAGE_STATE="normal"
+STORAGE_MESSAGE=""
+COOLING_STATE="normal"
+COOLING_MESSAGE=""
+UPS_STATE="normal"
+UPS_MESSAGE=""
+STORAGE_WARN_PERCENT="95"
+STORAGE_FAULT_PERCENT="98"
+CPU_WARN_C="60"
+CPU_FAULT_C="70"
+COOLANT_WARN_C="35"
+COOLANT_FAULT_C="40"
+FLOW_WARN_LPH="130"
+FLOW_FAULT_LPH="120"
+THROTTLE_LATCH_SECONDS="300"
+UPS_LOAD_WARN_PERCENT="90"
+UPS_LOAD_FAULT_PERCENT="100"
+WAZ_CONFIG
+fi
+
+for DEFAULT in \
+  'OVERALL_MESSAGE=""' \
+  'ARRAY_MESSAGE=""' \
+  'STORAGE_MESSAGE=""' \
+  'COOLING_MESSAGE=""' \
+  'UPS_MESSAGE=""' \
+  'STORAGE_WARN_PERCENT="95"' \
+  'STORAGE_FAULT_PERCENT="98"' \
+  'CPU_WARN_C="60"' \
+  'CPU_FAULT_C="70"' \
+  'COOLANT_WARN_C="35"' \
+  'COOLANT_FAULT_C="40"' \
+  'FLOW_WARN_LPH="130"' \
+  'FLOW_FAULT_LPH="120"' \
+  'THROTTLE_LATCH_SECONDS="300"' \
+  'UPS_LOAD_WARN_PERCENT="90"' \
+  'UPS_LOAD_FAULT_PERCENT="100"'; do
+  KEY="${DEFAULT%%=*}"
+  if ! grep -q "^${KEY}=" "$CONFIG_FILE"; then
+    printf '%s\n' "$DEFAULT" >> "$CONFIG_FILE"
+  fi
+done
+
+chmod 0644 "$CONFIG_FILE"
+rm -f "/var/tmp/waz-health-throttle-state.json"
+
+echo "WAZ Health Banner v0.3.0 installed. Reload the Unraid WebUI to display it."
+]]>
+</INLINE>
+</FILE>
+
+<!-- A normal uninstall removes everything owned by this plugin. -->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+<![CDATA[
+rm -rf "/usr/local/emhttp/plugins/waz.health"
+rm -rf "/boot/config/plugins/waz.health"
+rm -f "/var/tmp/waz-health-throttle-state.json"
+echo "WAZ Health Banner removed. Reload the Unraid WebUI to clear the banner."
+]]>
+</INLINE>
+</FILE>
+</PLUGIN>

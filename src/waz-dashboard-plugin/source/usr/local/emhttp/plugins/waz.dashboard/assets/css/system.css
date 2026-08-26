@@ -1,0 +1,651 @@
+#waz-system-tile {
+  --waz-bg: #111417;
+  --waz-panel: #1b2025;
+  --waz-raised: #22282e;
+  --waz-border: #303840;
+  --waz-text: #e6edf3;
+  --waz-muted: #87939f;
+  --waz-cyan: #22b8f0;
+  --waz-teal: #2dd4bf;
+  --waz-green: #35c46a;
+  --waz-amber: #f2a900;
+  --waz-red: #e55454;
+  --waz-violet: #a78bfa;
+  color: var(--waz-text);
+}
+
+#waz-system-tile > tr > td {
+  background: var(--waz-bg);
+  border-color: var(--waz-border);
+}
+
+#waz-system-tile .tile-header-main,
+#waz-system-tile .section,
+#waz-system-tile .section > span {
+  color: var(--waz-text);
+}
+
+.waz-freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: .38rem;
+  color: var(--waz-green);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+
+.waz-freshness i {
+  width: .5rem;
+  height: .5rem;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px rgb(53 196 106 / 12%);
+}
+
+.waz-freshness.waz-is-loading { color: var(--waz-muted); }
+.waz-freshness.waz-is-stale { color: var(--waz-amber); }
+.waz-freshness.waz-is-fault { color: var(--waz-red); }
+
+.waz-system {
+  font-variant-numeric: tabular-nums;
+  color: var(--waz-text);
+}
+
+.waz-system-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 8px;
+}
+
+.waz-system-header b {
+  display: block;
+  font-size: 15px;
+  line-height: 18px;
+}
+
+.waz-system-header small {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--waz-muted);
+  font-size: 11px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waz-system-header .waz-freshness {
+  gap: 5px;
+  font-size: 10px;
+}
+
+.waz-system-header .waz-freshness i {
+  width: 6px;
+  height: 6px;
+  box-shadow: none;
+}
+
+.waz-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  padding: 1px;
+  border: 1px solid var(--waz-border);
+  background: var(--waz-border);
+}
+
+.waz-summary-cell {
+  min-width: 0;
+  padding: .58rem .7rem;
+  background: var(--waz-panel);
+}
+
+.waz-summary-cell span,
+.waz-block-header b {
+  display: block;
+  color: var(--waz-muted);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .075em;
+  line-height: 1.2;
+}
+
+.waz-summary-cell strong {
+  display: block;
+  margin-top: .16rem;
+  overflow: hidden;
+  color: var(--waz-cyan);
+  font-size: 1rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waz-summary-cell.waz-accent-gpu strong { color: var(--waz-violet); }
+.waz-summary-cell.waz-accent-cooling strong { color: var(--waz-teal); }
+.waz-summary-cell.waz-accent-hba strong { color: var(--waz-teal); }
+.waz-summary-cell strong.waz-temp-attention { color: var(--waz-amber); }
+.waz-summary-cell strong.waz-temp-fault { color: var(--waz-red); }
+.waz-summary-cell strong.waz-temp-unknown { color: var(--waz-muted); }
+
+.waz-summary-cell strong.waz-network-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.waz-network-pair em {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--waz-cyan);
+  font-size: inherit;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waz-network-pair em + em {
+  color: var(--waz-violet);
+  text-align: right;
+}
+
+.waz-block {
+  margin-top: .75rem;
+  padding: .72rem;
+  border: 1px solid var(--waz-border);
+  background: var(--waz-panel);
+}
+
+.waz-block-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .75rem;
+}
+
+.waz-block-header > span {
+  min-width: 0;
+}
+
+.waz-block-header small {
+  display: block;
+  margin-top: .16rem;
+  overflow: hidden;
+  color: var(--waz-muted);
+  font-size: .75rem;
+  font-weight: 400;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waz-block-header > strong {
+  flex: 0 0 auto;
+  color: var(--waz-cyan);
+  font-size: 1.16rem;
+  line-height: 1.2;
+}
+
+.waz-chart-wrap,
+.waz-network-chart-wrap {
+  position: relative;
+  height: 78px;
+  margin-top: .55rem;
+  overflow: hidden;
+  border: 1px solid var(--waz-border);
+  background: var(--waz-bg);
+}
+
+.waz-chart-wrap > span,
+.waz-network-key {
+  position: absolute;
+  z-index: 1;
+  top: .28rem;
+  left: .38rem;
+  color: var(--waz-muted);
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .065em;
+  pointer-events: none;
+}
+
+.waz-chart-wrap svg,
+.waz-network-chart-wrap svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.waz-chart-wrap line,
+.waz-network-chart-wrap line {
+  stroke: rgb(135 147 159 / 18%);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+#waz-cpu-chart-line,
+#waz-network-rx-line,
+#waz-network-tx-line {
+  fill: none;
+  stroke: var(--waz-cyan);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+#waz-network-tx-line { stroke: var(--waz-violet); }
+
+.waz-network-key i {
+  display: inline-block;
+  width: .42rem;
+  height: .42rem;
+  margin-right: .18rem;
+  border-radius: 50%;
+  background: var(--waz-cyan);
+}
+
+.waz-network-key i:nth-of-type(2) {
+  margin-left: .42rem;
+  background: var(--waz-violet);
+}
+
+.waz-core-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .34rem;
+  margin-top: .55rem;
+}
+
+.waz-core {
+  min-width: 0;
+  padding: .38rem .44rem;
+  border: 1px solid rgb(135 147 159 / 16%);
+  background: var(--waz-raised);
+}
+
+.waz-core-head {
+  display: flex;
+  justify-content: space-between;
+  gap: .4rem;
+  margin-bottom: .24rem;
+  color: var(--waz-muted);
+  font-size: .65rem;
+  text-transform: uppercase;
+}
+
+.waz-thread {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr) 2.2rem;
+  align-items: center;
+  gap: .3rem;
+  font-size: .68rem;
+  line-height: 1.45;
+}
+
+.waz-thread > b {
+  overflow: hidden;
+  color: var(--waz-text);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waz-thread > em {
+  color: var(--waz-cyan);
+  font-style: normal;
+  text-align: right;
+}
+
+.waz-mini-meter,
+.waz-meter {
+  overflow: hidden;
+  background: #0b0d0f;
+}
+
+.waz-mini-meter { height: 4px; }
+.waz-meter { height: 6px; margin-top: .55rem; }
+
+.waz-mini-meter i,
+.waz-meter i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--waz-cyan);
+  transition: width .55s ease-out;
+}
+
+.waz-detail-line,
+.waz-member {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-top: .34rem;
+  color: var(--waz-muted);
+  font-size: .7rem;
+}
+
+.waz-memory-block .waz-meter i { background: var(--waz-cyan); }
+
+.waz-resource-row {
+  margin-top: 7px;
+}
+
+.waz-resource-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--waz-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .055em;
+  line-height: 13px;
+}
+
+.waz-resource-head span {
+  color: var(--waz-cyan);
+  font-size: 11.5px;
+  letter-spacing: 0;
+}
+
+.waz-resource-row .waz-meter {
+  margin-top: 4px;
+}
+
+.waz-resource-row .waz-detail-line {
+  margin-top: 3px;
+}
+
+.waz-network-chart-wrap { height: 62px; }
+
+.waz-member-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .35rem;
+  margin-top: .42rem;
+}
+
+.waz-member {
+  margin: 0;
+  padding: .35rem .42rem;
+  background: var(--waz-raised);
+}
+
+.waz-member b { color: var(--waz-text); }
+.waz-member span { white-space: nowrap; }
+
+.waz-state-dot {
+  display: inline-block;
+  width: .42rem;
+  height: .42rem;
+  margin-right: .25rem;
+  border-radius: 50%;
+  background: var(--waz-green);
+}
+
+.waz-state-dot.waz-down { background: var(--waz-red); }
+
+.waz-system-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .48rem .08rem 0;
+  color: var(--waz-muted);
+  font-size: .62rem;
+  letter-spacing: .02em;
+}
+
+.waz-muted { color: var(--waz-muted); }
+
+/* Unraid's dashboard uses a reduced root font size. Keep this panel readable
+   with an explicit pixel scale while it remains inside one native column. */
+#waz-system-tile .tile-header-main {
+  font-size: 15px;
+  line-height: 18px;
+}
+
+#waz-system-tile .section > span {
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.waz-freshness {
+  gap: 5px;
+  font-size: 9px;
+}
+
+.waz-freshness i {
+  width: 6px;
+  height: 6px;
+}
+
+.waz-summary-cell {
+  padding: 9px 11px;
+}
+
+.waz-summary-cell span,
+.waz-block-header b {
+  font-size: 9px;
+  line-height: 12px;
+}
+
+.waz-summary-cell strong {
+  margin-top: 3px;
+  font-size: 14px;
+  line-height: 17px;
+}
+
+.waz-block {
+  margin-top: 12px;
+  padding: 10px;
+}
+
+.waz-block-header {
+  gap: 10px;
+}
+
+.waz-block-header small {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.waz-block-header > strong {
+  font-size: 16px;
+  line-height: 19px;
+}
+
+.waz-chart-wrap {
+  height: 106px;
+  margin-top: 8px;
+}
+
+.waz-network-chart-wrap {
+  height: 82px;
+  margin-top: 8px;
+}
+
+.waz-chart-wrap > span,
+.waz-network-key {
+  top: 5px;
+  left: 6px;
+  font-size: 9px;
+}
+
+.waz-network-key i {
+  width: 6px;
+  height: 6px;
+}
+
+.waz-core-list {
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.waz-core {
+  padding: 6px 7px;
+}
+
+.waz-core-head {
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 9px;
+  line-height: 12px;
+}
+
+.waz-thread {
+  grid-template-columns: 38px minmax(0, 1fr) 35px;
+  gap: 5px;
+  font-size: 10.5px;
+  line-height: 18px;
+}
+
+.waz-mini-meter { height: 5px; }
+.waz-meter { height: 7px; margin-top: 8px; }
+
+.waz-detail-line,
+.waz-member {
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 10.5px;
+  line-height: 15px;
+}
+
+.waz-member-list {
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.waz-member {
+  padding: 6px 7px;
+}
+
+.waz-state-dot {
+  width: 6px;
+  height: 6px;
+  margin-right: 4px;
+}
+
+.waz-system-footer {
+  gap: 8px;
+  padding: 8px 2px 0;
+  font-size: 9px;
+  line-height: 12px;
+}
+
+/* Compact one-screen layout. The status board owns headline telemetry and the
+   sections below provide detail without repeating the same large values. */
+.waz-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.waz-summary-cell {
+  padding: 7px 9px;
+}
+
+.waz-summary-cell strong {
+  font-size: 15px;
+  line-height: 18px;
+}
+
+.waz-summary-cell small {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--waz-muted);
+  font-size: 10px;
+  line-height: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waz-summary-cell > span,
+.waz-block-header b {
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.waz-block-header small {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.waz-chart-wrap > span,
+.waz-network-key {
+  font-size: 10px;
+}
+
+.waz-block {
+  margin-top: 8px;
+  padding: 8px;
+}
+
+.waz-chart-wrap {
+  height: 70px;
+  margin-top: 6px;
+}
+
+.waz-network-chart-wrap {
+  height: 54px;
+  margin-top: 6px;
+}
+
+.waz-core-list {
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.waz-core {
+  padding: 5px 6px;
+}
+
+.waz-core-head {
+  margin-bottom: 2px;
+  font-size: 10px;
+  line-height: 12px;
+}
+
+.waz-thread {
+  font-size: 11.5px;
+  line-height: 17px;
+}
+
+.waz-meter {
+  margin-top: 6px;
+}
+
+.waz-detail-line,
+.waz-member {
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.waz-member-list {
+  margin-top: 5px;
+}
+
+.waz-member {
+  padding: 5px 6px;
+}
+
+.waz-system-footer {
+  align-items: center;
+  padding-top: 6px;
+}
+
+.waz-system-footer {
+  font-size: 10px;
+  line-height: 13px;
+}
+
+@media (max-width: 520px) {
+  .waz-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .waz-core-list { grid-template-columns: 1fr; }
+}

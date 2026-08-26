@@ -1,68 +1,55 @@
 # WAZ Control
 
-Custom Unraid dashboard and WebUI enhancements built around a specific, heavily customized Unraid server.
+WAZ Control is a custom Unraid dashboard and WebUI project built around one heavily customized server. The current unified build is **v0.7.0**.
 
 > [!WARNING]
-> **This project will not work correctly on a stock Unraid installation.**
-> It depends on specific plugins, system paths, sensors, hardware assumptions, and dashboard behavior documented in this repository. Expect to edit configuration and possibly code for your own system.
+> **This is a reference build, not a universal or supported Community Applications plugin.** It depends on specific Unraid plugins, runtime files, sensors, hardware, and WebUI behavior. Expect to adapt configuration or code for another server. Read the [disclaimer](DISCLAIMER.md), [dependencies](docs/DEPENDENCIES.md), and [recovery steps](docs/RECOVERY.md) before installing it.
 
-## What this is
+![WAZ Control status](https://img.shields.io/badge/status-rolling%20test-f2a900)
+![Version](https://img.shields.io/badge/version-0.7.0-22b8f0)
+![Tested on Unraid](https://img.shields.io/badge/tested-Unraid%207.3.2-e95420)
 
-WAZ Control is a rolling Unraid WebUI/dashboard project focused on dense, useful operator-style telemetry instead of a generic reskin.
+## What v0.7.0 includes
 
-The project is developed and tested against the maintainer's personal Unraid server first. Public use is welcome, but compatibility with other systems is not guaranteed.
+- Sticky full-width Health banner across Unraid WebUI pages
+- Live Array, Storage, Cooling, and UPS state with an expandable fault-detail row
+- Three matched Dashboard panels: Server Status, Workloads, and Storage
+- CPU topology, per-thread use, rolling load history, RAM, GPU, networking, rack power, coolant, flow, and HBA temperatures
+- Docker folders imported from FolderView Plus or Unraid's Docker Organizer
+- Clickable container cards that retain Unraid's native controls and load a dynamic telemetry inspector
+- Selected-container CPU, RAM, network, disk I/O, pool/share access, GPU activity, address, port, and status data
+- Top four host/Docker CPU processes
+- Compact parity state, last/next check timing, dynamic pools, physical disk locations, and a permanent array table
+- Decimal storage units and collection paths designed not to wake sleeping array disks
+- One installable rolling plugin without permanent edits to Unraid core files
 
-Current direction includes:
+The Docker and Storage panels deliberately use dynamic detail windows. Selecting a Docker folder filters the visible containers; selecting a container loads its live details below. Selecting a pool loads only that pool's member disks while the full Array and physical Disk Location views remain visible.
 
-- sticky global health banner
-- dynamic CPU topology and pinning verification
-- CPU/power averaging
-- cooling telemetry
-- compact memory and GPU views
-- storage controller/HBA views
-- network/LACP status
-- UPS status
-- parity-aware dashboard behavior
-- disk-location and array presentation improvements
-- cohesive dark theme styling
+## Install
 
-## Status
+The current artifact is [`releases/waz.dashboard.plg`](releases/waz.dashboard.plg). Follow [docs/INSTALL.md](docs/INSTALL.md); do not treat the file as a stock one-click package.
 
-**Early development / rolling test build.**
+Saved development builds and the original dashboard reference are retained for comparison. See [docs/VERSION_HISTORY.md](docs/VERSION_HISTORY.md). They are historical artifacts, not recommended installs.
 
-The first module is `WAZ Health`, followed by the rest of the dashboard section-by-section.
-
-## Before installing
-
-Read these first:
-
-- [Disclaimer](DISCLAIMER.md)
-- [Dependencies](docs/DEPENDENCIES.md)
-- [Installation](docs/INSTALL.md)
-- [Recovery](docs/RECOVERY.md)
-- [Tips & Notes](docs/TIPS.md)
-
-## Repository layout
+## Source layout
 
 ```text
-waz-control/
-├── README.md
-├── LICENSE
-├── DISCLAIMER.md
-├── docs/
-├── src/
-│   └── health/
-├── original/
-└── releases/
+src/
+├── waz-dashboard-plugin/  # unified plugin, panels, collectors, build and verification
+└── waz-health-plugin/     # banner component source consumed by the unified build
 ```
 
-`src/` contains the rolling development modules. `releases/` will contain installable test builds when available. `original/` is reserved for reference/original material where redistribution is appropriate.
+The dashboard build intentionally keeps the banner component beside it and embeds that component under the single `waz.dashboard` runtime during packaging.
 
-## Support model
+## Credit
 
-This is **not** a Community Applications release and no support is guaranteed.
+WAZ Control brings together data and behavior provided by Unraid/Dynamix, Docker Manager and Organizer, FolderView Plus, Disk Location, HBA Viewer, apcupsd/NUT, lm-sensors, and `intel_gpu_top`. See [docs/ATTRIBUTION.md](docs/ATTRIBUTION.md).
 
-If it works for you, great. If your hardware, plugins, DOM structure, sensors, or Unraid version differ, you may need to adapt it yourself. Pull requests are welcome.
+The layout, requirements, server-specific decisions, and testing were directed by TheIlluminate92. The PHP, JavaScript, CSS, collectors, packaging, and documentation were developed collaboratively with Codex by OpenAI.
+
+## Support
+
+No support is guaranteed. Pull requests are welcome, especially for clean auto-detection or documented hardware adaptations.
 
 ## License
 

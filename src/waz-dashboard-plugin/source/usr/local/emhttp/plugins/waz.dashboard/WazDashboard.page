@@ -1,0 +1,84 @@
+Menu="Dashboard:0"
+Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'7.2.0','>=')"
+
+---
+
+<?PHP
+$pluginname = 'waz.dashboard';
+
+$mytiles[$pluginname]['column1'] = <<<'EOT'
+<tbody id="waz-system-tile" title="Live processor, memory, graphics, network, power, and cooling telemetry">
+<tr><td>
+  <section class="waz-system" data-version="@@APP_VERSION@@">
+    <header class="waz-system-header">
+      <span><b>SERVER STATUS</b><small>Processor, memory, graphics, network, power, and cooling</small></span>
+      <span id="waz-system-freshness" class="waz-freshness waz-is-loading"><i></i> CONNECTING</span>
+    </header>
+
+    <div class="waz-summary" aria-label="System summary">
+      <div class="waz-summary-cell"><span>CPU</span><strong id="waz-summary-cpu">--</strong><small id="waz-summary-cpu-detail">Package power --</small></div>
+      <div class="waz-summary-cell waz-accent-gpu"><span>GPU</span><strong id="waz-summary-gpu">--</strong><small id="waz-summary-gpu-detail">No active processes</small></div>
+      <div class="waz-summary-cell"><span>RACK POWER</span><strong id="waz-summary-power">--</strong><small id="waz-summary-power-detail">Reading UPS load…</small></div>
+      <div class="waz-summary-cell"><span>RAM</span><strong id="waz-summary-memory">--</strong><small id="waz-summary-memory-detail">-- used</small></div>
+      <div class="waz-summary-cell waz-accent-cooling"><span>COOLANT</span><strong id="waz-summary-cooling">--</strong><small>Loop temperature</small></div>
+      <div class="waz-summary-cell waz-accent-hba"><span id="waz-hba-0-label">HBA /C0</span><strong id="waz-hba-0-temp">--</strong><small id="waz-hba-0-detail">Reading HBA Viewer…</small></div>
+      <div class="waz-summary-cell"><span>NETWORK</span><strong id="waz-summary-network" class="waz-network-pair"><em id="waz-summary-network-rx">↓ --</em><em id="waz-summary-network-tx">↑ --</em></strong><small id="waz-summary-network-detail">DOWNLOAD · UPLOAD</small></div>
+      <div class="waz-summary-cell waz-accent-cooling"><span>COOLANT FLOW</span><strong id="waz-summary-flow">--</strong><small>High Flow NEXT</small></div>
+      <div class="waz-summary-cell waz-accent-hba"><span id="waz-hba-1-label">HBA /C1</span><strong id="waz-hba-1-temp">--</strong><small id="waz-hba-1-detail">Reading HBA Viewer…</small></div>
+    </div>
+
+    <section class="waz-block waz-cpu-block">
+      <header class="waz-block-header">
+        <span><b>CPU</b><small><span id="waz-system-model">Loading processor…</span> · <span id="waz-cpu-count">-- cores / -- threads</span></small></span>
+      </header>
+      <div class="waz-chart-wrap">
+        <span>5 MINUTE LOAD</span>
+        <svg id="waz-cpu-chart" viewBox="0 0 600 90" preserveAspectRatio="none" aria-label="Five minute CPU load history">
+          <line x1="0" y1="22.5" x2="600" y2="22.5"></line>
+          <line x1="0" y1="45" x2="600" y2="45"></line>
+          <line x1="0" y1="67.5" x2="600" y2="67.5"></line>
+          <polyline id="waz-cpu-chart-line" points=""></polyline>
+        </svg>
+      </div>
+      <div id="waz-core-list" class="waz-core-list"><span class="waz-muted">Sampling CPU topology…</span></div>
+    </section>
+
+    <section class="waz-block waz-memory-block">
+      <header class="waz-block-header">
+        <span><b>MEMORY</b><small id="waz-memory-hardware">Detecting installed memory…</small></span>
+      </header>
+      <div class="waz-resource-row">
+        <div class="waz-resource-head"><b>RAM</b><span id="waz-memory-percent">--</span></div>
+        <div class="waz-meter"><i id="waz-memory-bar"></i></div>
+        <div class="waz-detail-line"><span id="waz-memory-used">-- used</span><span id="waz-memory-available">-- available</span></div>
+      </div>
+      <div class="waz-resource-row">
+        <div class="waz-resource-head"><b>LOG FILESYSTEM</b><span id="waz-log-percent">--</span></div>
+        <div class="waz-meter"><i id="waz-log-bar"></i></div>
+        <div class="waz-detail-line"><span id="waz-log-used">-- used</span><span id="waz-log-total">-- total</span></div>
+      </div>
+    </section>
+
+    <section class="waz-block waz-network-block">
+      <header class="waz-block-header">
+        <span><b>NETWORK</b><small id="waz-network-link">Detecting primary interface…</small></span>
+      </header>
+      <div class="waz-network-chart-wrap">
+        <span class="waz-network-key"><i></i> RECEIVE <i></i> TRANSMIT</span>
+        <svg id="waz-network-chart" viewBox="0 0 600 70" preserveAspectRatio="none" aria-label="Five minute network throughput history">
+          <line x1="0" y1="35" x2="600" y2="35"></line>
+          <polyline id="waz-network-rx-line" points=""></polyline>
+          <polyline id="waz-network-tx-line" points=""></polyline>
+        </svg>
+      </div>
+      <div id="waz-network-members" class="waz-member-list"><span class="waz-muted">Reading network members…</span></div>
+    </section>
+    <footer class="waz-system-footer"><span id="waz-system-updated">Waiting for first snapshot</span><span>v@@APP_VERSION@@</span></footer>
+  </section>
+</td></tr>
+</tbody>
+EOT;
+?>
+
+<link rel="stylesheet" href="/plugins/waz.dashboard/assets/css/system.css?v=@@APP_VERSION@@">
+<script defer src="/plugins/waz.dashboard/assets/js/system.js?v=@@APP_VERSION@@"></script>

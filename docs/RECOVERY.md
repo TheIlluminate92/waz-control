@@ -1,29 +1,41 @@
 # Recovery
 
-WAZ Control changes the Unraid WebUI. Always keep terminal/SSH access available while testing.
+WAZ Control adds plugin-owned files and does not permanently replace Unraid core files.
 
-## If the WebUI becomes unusable
+## Normal removal
 
-1. Connect to the server through SSH or the local console.
-2. Remove/disable the WAZ Control test plugin using the uninstall method documented with that build.
-3. Restart the Unraid WebUI service if required by that build.
-4. If files were manually replaced, restore the backed-up originals.
-5. Reboot only if normal WebUI recovery does not restore service.
+Use the Unraid Plugins page, or run:
 
-## Development rule
+```bash
+plugin remove waz.dashboard.plg
+```
 
-Every installable build must document exactly:
+The uninstall handler stops the GPU watcher and removes:
 
-- which paths it installs or changes
-- what it stores persistently on the flash drive
-- how to uninstall it from shell
-- whether a WebUI restart is required
-- whether any original files are modified
+- `/usr/local/emhttp/plugins/waz.dashboard`
+- `/boot/config/plugins/waz.dashboard`
+- `/var/run/waz.dashboard`
+- `/boot/config/plugins/waz.dashboard.plg`
 
-The preferred design is to inject/add files through the Unraid plugin mechanism and avoid permanent edits to core Unraid files.
+Reload the WebUI afterward.
 
-## Do not panic-delete
+## If the WebUI is unusable
 
-Avoid broad recursive delete commands. Remove only the exact WAZ Control paths documented for the build.
+Use SSH or the local console and run the normal removal command above. If Plugin Manager cannot execute it, move only the exact dashboard manifest out of the active plugin directory, remove the RAM-backed runtime, and reboot:
 
-Specific recovery commands will be added once the first rolling `.plg` is committed.
+```bash
+mv /boot/config/plugins/waz.dashboard.plg /boot/config/plugins/waz.dashboard.plg.disabled
+rm -rf /usr/local/emhttp/plugins/waz.dashboard
+reboot
+```
+
+The final two commands are intentionally narrow. Do not use broad recursive deletion against `/boot/config/plugins`, `/usr/local/emhttp/plugins`, or another parent directory.
+
+## Restore standalone WAZ Health
+
+If the old manifest was preserved by migration and the dashboard plugin has been removed:
+
+```bash
+mv /boot/config/plugins/waz.health.plg.disabled /boot/config/plugins/waz.health.plg
+plugin install /boot/config/plugins/waz.health.plg
+```

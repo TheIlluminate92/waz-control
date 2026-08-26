@@ -1,7 +1,7 @@
-# Original / Reference Material
+# Original reference
 
-This directory is reserved for original or reference files used while adapting WAZ Control.
+`waz.dashboard-reference-2026.08.24.12.plg` is the original custom dashboard artifact used as a design and implementation starting point.
 
-Only material that can legally and appropriately be redistributed should be committed here.
+It is retained to make the evolution of WAZ Control inspectable. It is not the current release and should not be installed together with `releases/waz.dashboard.plg`.
 
-Where practical, prefer storing patches/diffs and documenting the upstream source/version instead of copying large third-party files into the repository.
+Only reference material that can appropriately be redistributed should be added here.
