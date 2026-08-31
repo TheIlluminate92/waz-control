@@ -37,7 +37,8 @@ $required = @(
     '/usr/local/emhttp/plugins/waz.dashboard/include/md1200-controller.php',
     '/usr/local/emhttp/plugins/waz.dashboard/scripts/start.sh',
     '/usr/local/emhttp/plugins/waz.dashboard/scripts/stop.sh',
-    '/usr/local/emhttp/plugins/waz.dashboard/scripts/backup-md1200.sh'
+    '/usr/local/emhttp/plugins/waz.dashboard/scripts/backup-md1200.sh',
+    '/usr/local/emhttp/plugins/waz.dashboard/scripts/diagnose-md1200.sh'
 )
 
 $manifestText = [System.IO.File]::ReadAllText($manifest)
@@ -177,6 +178,8 @@ foreach ($marker in @(
     'csrfToken'
     'dockerConflict'
     'Controller disabled until migration is approved'
+    'sg_ses -p es'
+    '/diagnostics/'
 )) {
     if (-not $manifestText.Contains($marker)) {
         throw "Missing implementation marker: $marker"

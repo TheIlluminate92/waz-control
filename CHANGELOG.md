@@ -11,6 +11,7 @@
 - Blocked controller writes while the legacy Docker container is running.
 - Added cross-process serial locking and separated command-write status from fan telemetry status.
 - Staged fan control disabled by default and added migration backups under the `Back-Up` share.
+- Added a read-only SES mapping diagnostic that writes its results under the `Back-Up` share.
 
 ## v0.7.0 — 2026-08-26
 

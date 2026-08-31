@@ -50,6 +50,14 @@ The first v0.8 installation copies the legacy Docker settings, Docker template, 
 
 The replacement starts with `MD1200_ENABLED="no"`. Review the automatic curve and both SES mappings first, stop the Docker container, then set `MD1200_ENABLED="yes"`. Never run both controllers against the same serial adapters.
 
+To collect the read-only shelf mapping and fan-RPM data, run:
+
+```bash
+/usr/local/emhttp/plugins/waz.dashboard/scripts/diagnose-md1200.sh
+```
+
+It prints the timestamped destination under `/mnt/user/Back-Up/MD1200-Fan-Controller/diagnostics`. The diagnostic reads cached disk state and SES element status; it does not write to either serial adapter.
+
 ## Updating
 
 Repeat the download, staging, and forced-install commands. Runtime files are replaced in RAM; existing `/boot/config/plugins/waz.dashboard/waz.dashboard.cfg` settings are preserved and new defaults are appended.
