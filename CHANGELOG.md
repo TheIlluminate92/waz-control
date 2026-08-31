@@ -13,6 +13,7 @@
 - Staged fan control disabled by default and added migration backups under the `Back-Up` share.
 - Added a read-only SES mapping diagnostic that writes its results under the `Back-Up` share.
 - Mapped the 24 TB Top shelf to SCSI address `0:0:18:0` and the 14 TB Bottom shelf to `0:0:11:0`, with runtime `/dev/sg*` resolution.
+- Added a guarded 20%/50% commissioning test that records per-fan RPM, restores both shelves to 50%, and writes a ZIP under the `Back-Up` share.
 
 ## v0.7.0 — 2026-08-26
 

@@ -101,7 +101,7 @@ chmod 0644 "$RUNTIME_DIR/WazDashboard.page" "$RUNTIME_DIR/WazWorkloads.page" "$R
 chmod 0644 "$RUNTIME_DIR/assets/css/system.css" "$RUNTIME_DIR/assets/css/workloads.css" "$RUNTIME_DIR/assets/css/storage.css" "$RUNTIME_DIR/assets/css/banner.css"
 chmod 0644 "$RUNTIME_DIR/assets/js/system.js" "$RUNTIME_DIR/assets/js/workloads.js" "$RUNTIME_DIR/assets/js/storage.js" "$RUNTIME_DIR/assets/js/banner.js"
 chmod 0644 "$RUNTIME_DIR/include/metrics.php" "$RUNTIME_DIR/include/workloads.php" "$RUNTIME_DIR/include/storage.php" "$RUNTIME_DIR/include/gpu-sampler.php" "$RUNTIME_DIR/include/health.php" "$RUNTIME_DIR/include/status.php" "$RUNTIME_DIR/include/md1200.php" "$RUNTIME_DIR/include/md1200-control.php" "$RUNTIME_DIR/include/md1200-controller.php"
-chmod 0755 "$RUNTIME_DIR/scripts/start.sh" "$RUNTIME_DIR/scripts/stop.sh" "$RUNTIME_DIR/scripts/backup-md1200.sh" "$RUNTIME_DIR/scripts/diagnose-md1200.sh"
+chmod 0755 "$RUNTIME_DIR/scripts/start.sh" "$RUNTIME_DIR/scripts/stop.sh" "$RUNTIME_DIR/scripts/backup-md1200.sh" "$RUNTIME_DIR/scripts/diagnose-md1200.sh" "$RUNTIME_DIR/scripts/test-md1200-controls.sh"
 
 php -l "$RUNTIME_DIR/include/metrics.php" >/dev/null
 php -l "$RUNTIME_DIR/include/workloads.php" >/dev/null

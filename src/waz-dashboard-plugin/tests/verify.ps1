@@ -38,7 +38,8 @@ $required = @(
     '/usr/local/emhttp/plugins/waz.dashboard/scripts/start.sh',
     '/usr/local/emhttp/plugins/waz.dashboard/scripts/stop.sh',
     '/usr/local/emhttp/plugins/waz.dashboard/scripts/backup-md1200.sh',
-    '/usr/local/emhttp/plugins/waz.dashboard/scripts/diagnose-md1200.sh'
+    '/usr/local/emhttp/plugins/waz.dashboard/scripts/diagnose-md1200.sh',
+    '/usr/local/emhttp/plugins/waz.dashboard/scripts/test-md1200-controls.sh'
 )
 
 $manifestText = [System.IO.File]::ReadAllText($manifest)
@@ -182,6 +183,9 @@ foreach ($marker in @(
     'Controller disabled until migration is approved'
     'sg_ses -p es'
     '/diagnostics/'
+    'control-tests'
+    'Returning both shelves to the 50% commissioning-safe state'
+    'delta>=250 && percent>=10'
 )) {
     if (-not $manifestText.Contains($marker)) {
         throw "Missing implementation marker: $marker"
@@ -227,6 +231,15 @@ if ($php) {
         if ($manual.shelves[0].targetPercent -ne 40 -or $manual.shelves[1].targetPercent -ne 40) { throw 'MD1200 Manual mode did not apply to both shelves.' }
     } finally {
         Remove-Item -LiteralPath $autoState, $manualState -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$bash = Get-Command bash -ErrorAction SilentlyContinue
+if ($bash) {
+    foreach ($relative in @('start.sh', 'stop.sh', 'backup-md1200.sh', 'diagnose-md1200.sh', 'test-md1200-controls.sh')) {
+        $file = Join-Path $projectRoot ('source/usr/local/emhttp/plugins/waz.dashboard/scripts/' + $relative)
+        & $bash.Source -n $file
+        if ($LASTEXITCODE -ne 0) { throw "Shell syntax check failed: $relative" }
     }
 }
 
