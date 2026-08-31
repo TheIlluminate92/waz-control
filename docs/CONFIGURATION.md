@@ -66,11 +66,13 @@ MD1200_SPEED_COOL="20"
 MD1200_SPEED_WARM="25"
 MD1200_SPEED_HOT="30"
 MD1200_SPEED_VERY_HOT="50"
-MD1200_TOP_SES_DEVICE=""
+MD1200_TOP_SES_DEVICE="/dev/sg18"
+MD1200_TOP_SES_ADDRESS="0:0:18:0"
 MD1200_BOTTOM_SES_DEVICE="/dev/sg11"
+MD1200_BOTTOM_SES_ADDRESS="0:0:11:0"
 MD1200_BACKUP_DIR="/mnt/user/Back-Up/MD1200-Fan-Controller"
 ```
 
 Auto mode chooses a target independently for each shelf from the hottest valid temperature among that shelf's assigned disks. If all assigned disks are spun down it uses the cool speed. If active disks have no valid temperature, it uses the sensor-failure speed. One-degree hysteresis prevents rapid changes around a threshold.
 
-Average RPM requires a working `sg_ses` command and the correct SES device for each shelf. `/dev/sg11` is carried over only as the observed Bottom-shelf mapping and must be rechecked after reboot; the Top mapping remains empty until it is identified. A successful serial write is reported separately from RPM telemetry and is not treated as proof that a shelf obeyed the command.
+Average RPM requires a working `sg_ses` command. Diagnostics identified the 24 TB Top shelf at SCSI address `0:0:18:0` (`/dev/sg18` during commissioning) and the 14 TB Bottom shelf at `0:0:11:0` (`/dev/sg11`). The controller resolves those addresses back to the current `/dev/sg*` names each time it polls, so ordinary device renumbering does not break telemetry. A successful serial write is reported separately from RPM telemetry and is not treated as proof that a shelf obeyed the command.

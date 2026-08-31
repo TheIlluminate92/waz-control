@@ -5051,10 +5051,24 @@ function waz_md1200_controller_shelves(array $config): array
             'name' => trim((string) ($config['MD1200_' . $prefix . '_NAME'] ?? 'MD1200 ' . ucfirst($id))),
             'port' => trim((string) ($config['MD1200_' . $prefix . '_PORT'] ?? '')),
             'sesDevice' => trim((string) ($config['MD1200_' . $prefix . '_SES_DEVICE'] ?? '')),
+            'sesAddress' => trim((string) ($config['MD1200_' . $prefix . '_SES_ADDRESS'] ?? '')),
             'disks' => waz_md1200_controller_list((string) ($config['MD1200_' . $prefix . '_DISKS'] ?? '')),
         ];
     }
     return $result;
+}
+
+function waz_md1200_controller_resolve_ses(string $configuredDevice, string $scsiAddress): string
+{
+    if ($scsiAddress !== '') {
+        foreach (glob('/sys/class/scsi_generic/sg*') ?: [] as $genericPath) {
+            $resolved = @realpath($genericPath . '/device');
+            if ($resolved !== false && basename($resolved) === $scsiAddress) {
+                return '/dev/' . basename($genericPath);
+            }
+        }
+    }
+    return $configuredDevice;
 }
 
 function waz_md1200_controller_disks(string $path): array
@@ -5268,7 +5282,8 @@ while ($running) {
             $write = waz_md1200_controller_send((string) $shelf['port'], $target, $dryRun);
             if (in_array($write['state'], ['sent', 'dry-run'], true)) $lastCommands[$id] = time();
         }
-        $telemetry = waz_md1200_controller_rpm($id, (string) $shelf['sesDevice'], $fixtureDirectory);
+        $resolvedSes = waz_md1200_controller_resolve_ses((string) $shelf['sesDevice'], (string) $shelf['sesAddress']);
+        $telemetry = waz_md1200_controller_rpm($id, $resolvedSes, $fixtureDirectory);
 
         if ($enabled && $write['state'] === 'fault') {
             $controllerState = 'fault';
@@ -5281,6 +5296,8 @@ while ($running) {
         $shelfStates[] = [
             'id' => $id,
             'name' => $shelf['name'],
+            'sesDevice' => $resolvedSes,
+            'sesAddress' => $shelf['sesAddress'],
             'assignedDisks' => $shelf['disks'],
             'assignedSeen' => $thermal['assignedSeen'],
             'activeDisks' => $thermal['activeDisks'],
@@ -5351,11 +5368,13 @@ function waz_md1200_defaults(): array
         'MD1200_SPEED_VERY_HOT' => '50',
         'MD1200_TOP_NAME' => 'MD1200 Top',
         'MD1200_TOP_PORT' => '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE33O9T-if00-port0',
-        'MD1200_TOP_SES_DEVICE' => '',
+        'MD1200_TOP_SES_DEVICE' => '/dev/sg18',
+        'MD1200_TOP_SES_ADDRESS' => '0:0:18:0',
         'MD1200_TOP_DISKS' => 'disk1,disk2,disk3,disk4,parity,parity2',
         'MD1200_BOTTOM_NAME' => 'MD1200 Bottom',
         'MD1200_BOTTOM_PORT' => '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE32AB2-if00-port0',
         'MD1200_BOTTOM_SES_DEVICE' => '/dev/sg11',
+        'MD1200_BOTTOM_SES_ADDRESS' => '0:0:11:0',
         'MD1200_BOTTOM_DISKS' => 'disk5,disk6,disk7,disk8,disk9,disk10,disk11,disk12,disk13,disk14,disk15',
         'MD1200_BACKUP_DIR' => '/mnt/user/Back-Up/MD1200-Fan-Controller',
     ];
@@ -7986,11 +8005,13 @@ MD1200_SPEED_HOT="30"
 MD1200_SPEED_VERY_HOT="50"
 MD1200_TOP_NAME="MD1200 Top"
 MD1200_TOP_PORT="/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE33O9T-if00-port0"
-MD1200_TOP_SES_DEVICE=""
+MD1200_TOP_SES_DEVICE="/dev/sg18"
+MD1200_TOP_SES_ADDRESS="0:0:18:0"
 MD1200_TOP_DISKS="disk1,disk2,disk3,disk4,parity,parity2"
 MD1200_BOTTOM_NAME="MD1200 Bottom"
 MD1200_BOTTOM_PORT="/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE32AB2-if00-port0"
 MD1200_BOTTOM_SES_DEVICE="/dev/sg11"
+MD1200_BOTTOM_SES_ADDRESS="0:0:11:0"
 MD1200_BOTTOM_DISKS="disk5,disk6,disk7,disk8,disk9,disk10,disk11,disk12,disk13,disk14,disk15"
 MD1200_BACKUP_DIR="/mnt/user/Back-Up/MD1200-Fan-Controller"
 WAZ_CONFIG
@@ -8038,11 +8059,13 @@ for DEFAULT in \
   'MD1200_SPEED_VERY_HOT="50"' \
   'MD1200_TOP_NAME="MD1200 Top"' \
   'MD1200_TOP_PORT="/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE33O9T-if00-port0"' \
-  'MD1200_TOP_SES_DEVICE=""' \
+  'MD1200_TOP_SES_DEVICE="/dev/sg18"' \
+  'MD1200_TOP_SES_ADDRESS="0:0:18:0"' \
   'MD1200_TOP_DISKS="disk1,disk2,disk3,disk4,parity,parity2"' \
   'MD1200_BOTTOM_NAME="MD1200 Bottom"' \
   'MD1200_BOTTOM_PORT="/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE32AB2-if00-port0"' \
   'MD1200_BOTTOM_SES_DEVICE="/dev/sg11"' \
+  'MD1200_BOTTOM_SES_ADDRESS="0:0:11:0"' \
   'MD1200_BOTTOM_DISKS="disk5,disk6,disk7,disk8,disk9,disk10,disk11,disk12,disk13,disk14,disk15"' \
   'MD1200_BACKUP_DIR="/mnt/user/Back-Up/MD1200-Fan-Controller"'; do
   KEY="${DEFAULT%%=*}"

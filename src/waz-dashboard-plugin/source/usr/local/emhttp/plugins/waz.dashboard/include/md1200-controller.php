@@ -44,10 +44,24 @@ function waz_md1200_controller_shelves(array $config): array
             'name' => trim((string) ($config['MD1200_' . $prefix . '_NAME'] ?? 'MD1200 ' . ucfirst($id))),
             'port' => trim((string) ($config['MD1200_' . $prefix . '_PORT'] ?? '')),
             'sesDevice' => trim((string) ($config['MD1200_' . $prefix . '_SES_DEVICE'] ?? '')),
+            'sesAddress' => trim((string) ($config['MD1200_' . $prefix . '_SES_ADDRESS'] ?? '')),
             'disks' => waz_md1200_controller_list((string) ($config['MD1200_' . $prefix . '_DISKS'] ?? '')),
         ];
     }
     return $result;
+}
+
+function waz_md1200_controller_resolve_ses(string $configuredDevice, string $scsiAddress): string
+{
+    if ($scsiAddress !== '') {
+        foreach (glob('/sys/class/scsi_generic/sg*') ?: [] as $genericPath) {
+            $resolved = @realpath($genericPath . '/device');
+            if ($resolved !== false && basename($resolved) === $scsiAddress) {
+                return '/dev/' . basename($genericPath);
+            }
+        }
+    }
+    return $configuredDevice;
 }
 
 function waz_md1200_controller_disks(string $path): array
@@ -261,7 +275,8 @@ while ($running) {
             $write = waz_md1200_controller_send((string) $shelf['port'], $target, $dryRun);
             if (in_array($write['state'], ['sent', 'dry-run'], true)) $lastCommands[$id] = time();
         }
-        $telemetry = waz_md1200_controller_rpm($id, (string) $shelf['sesDevice'], $fixtureDirectory);
+        $resolvedSes = waz_md1200_controller_resolve_ses((string) $shelf['sesDevice'], (string) $shelf['sesAddress']);
+        $telemetry = waz_md1200_controller_rpm($id, $resolvedSes, $fixtureDirectory);
 
         if ($enabled && $write['state'] === 'fault') {
             $controllerState = 'fault';
@@ -274,6 +289,8 @@ while ($running) {
         $shelfStates[] = [
             'id' => $id,
             'name' => $shelf['name'],
+            'sesDevice' => $resolvedSes,
+            'sesAddress' => $shelf['sesAddress'],
             'assignedDisks' => $shelf['disks'],
             'assignedSeen' => $thermal['assignedSeen'],
             'activeDisks' => $thermal['activeDisks'],

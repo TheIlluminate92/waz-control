@@ -166,8 +166,10 @@ foreach ($marker in @(
     'MD1200_SENSOR_FAILURE_SPEED="50"'
     'MD1200_THRESHOLD_VERY_HOT_C="50"'
     'MD1200_SPEED_VERY_HOT="50"'
-    'MD1200_TOP_SES_DEVICE=""'
+    'MD1200_TOP_SES_DEVICE="/dev/sg18"'
+    'MD1200_TOP_SES_ADDRESS="0:0:18:0"'
     'MD1200_BOTTOM_SES_DEVICE="/dev/sg11"'
+    'MD1200_BOTTOM_SES_ADDRESS="0:0:11:0"'
     '/mnt/user/Back-Up/MD1200-Fan-Controller'
     'MD1200-Fan-Controller'
     'set_speed '
@@ -216,7 +218,8 @@ if ($php) {
         if ($LASTEXITCODE -ne 0) { throw 'MD1200 Auto dry-run failed.' }
         $auto = Get-Content -Raw $autoState | ConvertFrom-Json
         if ($auto.shelves[0].targetPercent -ne 25 -or $auto.shelves[1].targetPercent -ne 50) { throw 'MD1200 Auto curve produced unexpected targets.' }
-        if ($auto.shelves[0].averageRpm -ne 2000 -or $auto.shelves[1].averageRpm -ne 3100) { throw 'MD1200 average RPM parsing failed.' }
+        if ($auto.shelves[0].averageRpm -ne 3965 -or $auto.shelves[1].averageRpm -ne 3535) { throw 'MD1200 average RPM parsing failed.' }
+        if ($auto.shelves[0].fanCount -ne 4 -or $auto.shelves[1].fanCount -ne 4) { throw 'MD1200 fan parsing included the zero-RPM overall descriptor.' }
 
         & $php.Source $controller --once --dry-run --config (Join-Path $fixtures 'md1200-manual.cfg') --disks (Join-Path $fixtures 'disks.ini') --state $manualState --fixture-dir (Join-Path $fixtures 'ses')
         if ($LASTEXITCODE -ne 0) { throw 'MD1200 Manual dry-run failed.' }
