@@ -1,15 +1,15 @@
 # WAZ Control
 
-WAZ Control is a custom Unraid dashboard and WebUI project built around one heavily customized server. The current unified build is **v0.7.0**.
+WAZ Control is a custom Unraid dashboard and WebUI project built around one heavily customized server. The current unified build is **v0.8.0**.
 
 > [!WARNING]
 > **This is a reference build, not a universal or supported Community Applications plugin.** It depends on specific Unraid plugins, runtime files, sensors, hardware, and WebUI behavior. Expect to adapt configuration or code for another server. Read the [disclaimer](DISCLAIMER.md), [dependencies](docs/DEPENDENCIES.md), and [recovery steps](docs/RECOVERY.md) before installing it.
 
 ![WAZ Control status](https://img.shields.io/badge/status-rolling%20test-f2a900)
-![Version](https://img.shields.io/badge/version-0.7.0-22b8f0)
+![Version](https://img.shields.io/badge/version-0.8.0-22b8f0)
 ![Tested on Unraid](https://img.shields.io/badge/tested-Unraid%207.3.2-e95420)
 
-## What v0.7.0 includes
+## What v0.8.0 includes
 
 - Sticky full-width Health banner across Unraid WebUI pages
 - Live Array, Storage, Cooling, and UPS state with an expandable fault-detail row
@@ -22,6 +22,9 @@ WAZ Control is a custom Unraid dashboard and WebUI project built around one heav
 - Compact parity state, last/next check timing, dynamic pools, physical disk locations, and a permanent array table
 - Decimal storage units and collection paths designed not to wake sleeping array disks
 - One installable rolling plugin without permanent edits to Unraid core files
+- Host-native MD1200 Top/Bottom fan control with automatic disk-temperature curves
+- Average fan RPM in Auto mode and confirmed 20/30/40/50 percent Manual control in the header
+- Disabled-by-default migration, Docker-conflict blocking, serial locks, and Back-Up share snapshots
 
 The Docker and Storage panels deliberately use dynamic detail windows. Selecting a Docker folder filters the visible containers; selecting a container loads its live details below. Selecting a pool loads only that pool's member disks while the full Array and physical Disk Location views remain visible.
 

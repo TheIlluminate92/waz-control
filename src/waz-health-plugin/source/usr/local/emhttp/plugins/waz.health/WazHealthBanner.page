@@ -9,11 +9,17 @@ $jsFile = $pluginRoot . '/assets/js/banner.js';
 
 $cssVersion = is_file($cssFile) ? filemtime($cssFile) : 0;
 $jsVersion = is_file($jsFile) ? filemtime($jsFile) : 0;
+$varValues = is_file('/var/local/emhttp/var.ini')
+    ? @parse_ini_file('/var/local/emhttp/var.ini', false, INI_SCANNER_RAW)
+    : [];
+$csrfToken = is_array($varValues) ? (string) ($varValues['csrf_token'] ?? '') : '';
 ?>
 <link rel="stylesheet" href="<?=$webRoot?>/assets/css/banner.css?v=<?=$cssVersion?>">
 <script>
 window.WAZHealthBootstrap = <?=json_encode([
     'endpoint' => $webRoot . '/include/status.php',
+    'fanEndpoint' => $webRoot . '/include/md1200-control.php',
+    'csrfToken' => $csrfToken,
     'refreshMs' => 5000,
 ], JSON_UNESCAPED_SLASHES)?>;
 </script>

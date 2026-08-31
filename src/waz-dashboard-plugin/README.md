@@ -2,7 +2,7 @@
 
 WAZ Dashboard is a rolling-test Unraid 7.2+ dashboard plugin. It installs matched System, Workloads, and Storage panels in the three native dashboard columns and does not modify Unraid core files.
 
-## Version 0.7.0 scope
+## Version 0.8.0 scope
 
 - Sticky full-width WAZ Health banner across the WebUI, now installed and maintained by this single dashboard plugin
 - Banner colors matched to the dashboard's dark background, border, text, cyan, green, amber, and red palette
@@ -37,6 +37,11 @@ WAZ Dashboard is a rolling-test Unraid 7.2+ dashboard plugin. It installs matche
 - Workloads header attention state for unhealthy containers and autostart services that remain stopped after exit 1 or 137; intentionally stopped and on-demand containers are ignored
 - Docker-vdisk used/total capacity in the Workloads summary instead of the System memory section
 - Storage capacities displayed in decimal KB, MB, GB, and TB units
+- Compact MD1200 fan control in the full-width Health header
+- Independent Top and Bottom average RPM readouts in Auto mode
+- Confirmed 20%, 30%, 40%, and 50% Manual control for both shelves
+- A disabled-by-default host controller that blocks writes while the legacy Docker container is running
+- Migration snapshots in `/mnt/user/Back-Up/MD1200-Fan-Controller`
 
 When HBA Viewer is installed, WAZ System reads its authenticated `export.php` endpoint once per minute. That endpoint uses HBA Viewer's existing 60-second overview cache and controller-read lock, so WAZ does not launch an additional StorCLI scan. If HBA Viewer is absent, both HBA cells show unavailable.
 

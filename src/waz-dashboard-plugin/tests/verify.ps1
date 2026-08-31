@@ -32,8 +32,12 @@ $required = @(
     '/usr/local/emhttp/plugins/waz.dashboard/include/gpu-sampler.php',
     '/usr/local/emhttp/plugins/waz.dashboard/include/health.php',
     '/usr/local/emhttp/plugins/waz.dashboard/include/status.php',
+    '/usr/local/emhttp/plugins/waz.dashboard/include/md1200.php',
+    '/usr/local/emhttp/plugins/waz.dashboard/include/md1200-control.php',
+    '/usr/local/emhttp/plugins/waz.dashboard/include/md1200-controller.php',
     '/usr/local/emhttp/plugins/waz.dashboard/scripts/start.sh',
-    '/usr/local/emhttp/plugins/waz.dashboard/scripts/stop.sh'
+    '/usr/local/emhttp/plugins/waz.dashboard/scripts/stop.sh',
+    '/usr/local/emhttp/plugins/waz.dashboard/scripts/backup-md1200.sh'
 )
 
 $manifestText = [System.IO.File]::ReadAllText($manifest)
@@ -155,6 +159,24 @@ foreach ($marker in @(
     '--waz-health-cyan: #22b8f0',
     'LEGACY_HEALTH_CONFIG',
     '${LEGACY_HEALTH_PLUGIN}.disabled'
+    'MD1200_ENABLED="no"'
+    'MD1200_MODE="auto"'
+    'MD1200_MANUAL_SPEED="20"'
+    'MD1200_SENSOR_FAILURE_SPEED="50"'
+    'MD1200_THRESHOLD_VERY_HOT_C="50"'
+    'MD1200_SPEED_VERY_HOT="50"'
+    'MD1200_TOP_SES_DEVICE=""'
+    'MD1200_BOTTOM_SES_DEVICE="/dev/sg11"'
+    '/mnt/user/Back-Up/MD1200-Fan-Controller'
+    'MD1200-Fan-Controller'
+    'set_speed '
+    'Actual\s+speed'
+    'averageRpm'
+    'MANUAL 40%'
+    'fanEndpoint'
+    'csrfToken'
+    'dockerConflict'
+    'Controller disabled until migration is approved'
 )) {
     if (-not $manifestText.Contains($marker)) {
         throw "Missing implementation marker: $marker"
@@ -163,6 +185,43 @@ foreach ($marker in @(
 
 if ($manifestText.Contains('/boot/config/plugins/waz.dashboard/waz.health.cfg')) {
     throw 'Integrated Health is still pointed at the legacy configuration filename.'
+}
+
+$php = Get-Command php -ErrorAction SilentlyContinue
+if ($php) {
+    $phpFiles = @(
+        'include/metrics.php', 'include/workloads.php', 'include/storage.php', 'include/gpu-sampler.php',
+        'include/md1200.php', 'include/md1200-control.php', 'include/md1200-controller.php'
+    )
+    foreach ($relative in $phpFiles) {
+        $file = Join-Path $projectRoot ('source/usr/local/emhttp/plugins/waz.dashboard/' + $relative)
+        & $php.Source -l $file | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "PHP syntax check failed: $relative" }
+    }
+    foreach ($relative in @('include/health.php', 'include/status.php')) {
+        $file = Join-Path (Split-Path -Parent $projectRoot) ('waz-health-plugin/source/usr/local/emhttp/plugins/waz.health/' + $relative)
+        & $php.Source -l $file | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "PHP syntax check failed: $relative" }
+    }
+
+    $controller = Join-Path $projectRoot 'source/usr/local/emhttp/plugins/waz.dashboard/include/md1200-controller.php'
+    $fixtures = Join-Path $PSScriptRoot 'fixtures'
+    $autoState = Join-Path ([System.IO.Path]::GetTempPath()) ('waz-md1200-auto-' + [guid]::NewGuid() + '.json')
+    $manualState = Join-Path ([System.IO.Path]::GetTempPath()) ('waz-md1200-manual-' + [guid]::NewGuid() + '.json')
+    try {
+        & $php.Source $controller --once --dry-run --config (Join-Path $fixtures 'md1200-auto.cfg') --disks (Join-Path $fixtures 'disks.ini') --state $autoState --fixture-dir (Join-Path $fixtures 'ses')
+        if ($LASTEXITCODE -ne 0) { throw 'MD1200 Auto dry-run failed.' }
+        $auto = Get-Content -Raw $autoState | ConvertFrom-Json
+        if ($auto.shelves[0].targetPercent -ne 25 -or $auto.shelves[1].targetPercent -ne 50) { throw 'MD1200 Auto curve produced unexpected targets.' }
+        if ($auto.shelves[0].averageRpm -ne 2000 -or $auto.shelves[1].averageRpm -ne 3100) { throw 'MD1200 average RPM parsing failed.' }
+
+        & $php.Source $controller --once --dry-run --config (Join-Path $fixtures 'md1200-manual.cfg') --disks (Join-Path $fixtures 'disks.ini') --state $manualState --fixture-dir (Join-Path $fixtures 'ses')
+        if ($LASTEXITCODE -ne 0) { throw 'MD1200 Manual dry-run failed.' }
+        $manual = Get-Content -Raw $manualState | ConvertFrom-Json
+        if ($manual.shelves[0].targetPercent -ne 40 -or $manual.shelves[1].targetPercent -ne 40) { throw 'MD1200 Manual mode did not apply to both shelves.' }
+    } finally {
+        Remove-Item -LiteralPath $autoState, $manualState -Force -ErrorAction SilentlyContinue
+    }
 }
 
 foreach ($removedMarker in @('WAZ // SYSTEM', 'waz-allocation', 'section=allocation', 'waz_allocation', 'waz-gpu-block', 'SERVER POWER', 'serverInputWatts', 'CONTAINER PROCESSES', 'waz-selected-process-list', 'waz-workloads-running-detail', 'waz-workloads-health-detail', 'waz-workloads-gpu-detail', 'waz-workloads-healthy', 'waz-workloads-issues', 'waz-docker-bar', 'waz-docker-percent', 'waz-docker-used', 'waz-docker-total', 'waz-array-location')) {

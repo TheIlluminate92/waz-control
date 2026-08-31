@@ -109,8 +109,8 @@
 #waz-health-banner .waz-health__subsystems {
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex: 1 1 auto;
+  justify-content: flex-start;
+  flex: 0 1 auto;
   gap: clamp(10px, 1.35vw, 22px);
 }
 
@@ -164,10 +164,71 @@
 #waz-health-banner .waz-health__meta {
   flex: 0 0 auto;
   gap: clamp(12px, 1.3vw, 20px);
-  margin-left: auto;
+  margin-left: 0;
   color: var(--waz-health-muted);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
+}
+
+#waz-health-banner .waz-health__fans {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+  margin-left: auto;
+  color: var(--waz-health-text);
+  letter-spacing: 0.045em;
+}
+
+#waz-health-banner .waz-health__fans-label,
+#waz-health-banner .waz-health__fan-readings {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+#waz-health-banner .waz-health__fan-readings {
+  color: var(--waz-health-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+#waz-health-banner .waz-health__fans[data-state="attention"] .waz-health__fans-label {
+  color: var(--waz-health-attention);
+}
+
+#waz-health-banner .waz-health__fans[data-state="fault"] .waz-health__fans-label {
+  color: var(--waz-health-fault);
+}
+
+#waz-health-banner .waz-health__fans--disabled {
+  opacity: 0.58;
+}
+
+#waz-health-banner .waz-health__fan-select {
+  box-sizing: border-box;
+  height: 25px;
+  min-width: 72px;
+  margin: 0;
+  padding: 0 23px 0 8px;
+  border: 1px solid var(--waz-health-border);
+  border-radius: 3px;
+  background: var(--waz-health-raised);
+  color: var(--waz-health-text);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+#waz-health-banner .waz-health__fan-select:focus-visible {
+  outline: 2px solid var(--waz-health-cyan);
+  outline-offset: 1px;
+}
+
+#waz-health-banner .waz-health__fan-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 #waz-health-banner .waz-health__uptime {
@@ -197,6 +258,10 @@
 
   #waz-health-banner .waz-health__subsystems {
     flex: 0 0 auto;
+  }
+
+  #waz-health-banner .waz-health__fan-readings {
+    display: none;
   }
 }
 

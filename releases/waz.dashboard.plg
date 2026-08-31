@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name "waz.dashboard">
   <!ENTITY author "WAZ">
-  <!ENTITY version "2026.08.26.16">
+  <!ENTITY version "2026.08.31.12">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="file:///boot/config/plugins/waz.dashboard.plg" min="7.2.0" icon="fa-tachometer">
 <CHANGES>
-### &version; - WAZ System v0.7.0
+### &version; - WAZ System v0.8.0
 
 - Integrates the sticky WAZ Health banner, live collectors, thresholds, local time, and uptime into the dashboard plugin.
 - Matches the banner to the System, Workloads, and Storage dark palette.
@@ -60,6 +60,10 @@
 - Adds best-effort Intel GPU and video process attribution.
 - Replaces 100 ms server polling with one combined snapshot per second.
 - Keeps persistent settings during forced rolling updates.
+- Replaces the MD1200 Docker controller with a host-native, disabled-by-default control loop and compact header control.
+- Shows independent Top and Bottom average fan RPM in Auto mode and offers 20/30/40/50 percent Manual control.
+- Blocks serial writes while the old Docker controller is running and distinguishes command writes from SES fan telemetry.
+- Backs up the Docker configuration, template, logs, and WAZ controller state to the Back-Up share before migration.
 </CHANGES>
 
 <!-- Stop the prior watcher before replacing the RAM-backed runtime tree. -->
@@ -194,8 +198,8 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
 #waz-health-banner .waz-health__subsystems {
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex: 1 1 auto;
+  justify-content: flex-start;
+  flex: 0 1 auto;
   gap: clamp(10px, 1.35vw, 22px);
 }
 
@@ -249,10 +253,71 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
 #waz-health-banner .waz-health__meta {
   flex: 0 0 auto;
   gap: clamp(12px, 1.3vw, 20px);
-  margin-left: auto;
+  margin-left: 0;
   color: var(--waz-health-muted);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
+}
+
+#waz-health-banner .waz-health__fans {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+  margin-left: auto;
+  color: var(--waz-health-text);
+  letter-spacing: 0.045em;
+}
+
+#waz-health-banner .waz-health__fans-label,
+#waz-health-banner .waz-health__fan-readings {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+#waz-health-banner .waz-health__fan-readings {
+  color: var(--waz-health-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+#waz-health-banner .waz-health__fans[data-state="attention"] .waz-health__fans-label {
+  color: var(--waz-health-attention);
+}
+
+#waz-health-banner .waz-health__fans[data-state="fault"] .waz-health__fans-label {
+  color: var(--waz-health-fault);
+}
+
+#waz-health-banner .waz-health__fans--disabled {
+  opacity: 0.58;
+}
+
+#waz-health-banner .waz-health__fan-select {
+  box-sizing: border-box;
+  height: 25px;
+  min-width: 72px;
+  margin: 0;
+  padding: 0 23px 0 8px;
+  border: 1px solid var(--waz-health-border);
+  border-radius: 3px;
+  background: var(--waz-health-raised);
+  color: var(--waz-health-text);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+#waz-health-banner .waz-health__fan-select:focus-visible {
+  outline: 2px solid var(--waz-health-cyan);
+  outline-offset: 1px;
+}
+
+#waz-health-banner .waz-health__fan-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 #waz-health-banner .waz-health__uptime {
@@ -282,6 +347,10 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
 
   #waz-health-banner .waz-health__subsystems {
     flex: 0 0 auto;
+  }
+
+  #waz-health-banner .waz-health__fan-readings {
+    display: none;
   }
 }
 
@@ -828,6 +897,7 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
   .waz-pool-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .waz-storage { height: auto !important; overflow: visible; }
 }
+
 
 ]]>
 </INLINE>
@@ -1487,6 +1557,7 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
   .waz-core-list { grid-template-columns: 1fr; }
 }
 
+
 ]]>
 </INLINE>
 </FILE>
@@ -1986,6 +2057,7 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
   .waz-selected-detail-grid { grid-template-columns: 1fr; }
 }
 
+
 ]]>
 </INLINE>
 </FILE>
@@ -1999,6 +2071,8 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
 
   var config = window.WAZHealthBootstrap || {};
   var endpoint = config.endpoint || "/plugins/waz.dashboard/include/status.php";
+  var fanEndpoint = config.fanEndpoint || "/plugins/waz.dashboard/include/md1200-control.php";
+  var csrfToken = String(config.csrfToken || "");
   var refreshMs = Math.max(3000, Number(config.refreshMs) || 5000);
   var allowedStates = ["normal", "attention", "fault", "unknown"];
   var subsystemOrder = ["array", "storage", "cooling", "ups"];
@@ -2006,12 +2080,14 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
     server: { label: "WAZ-SERVER", uptimeSeconds: null },
     overall: { label: "SYSTEM NORMAL", state: "normal", message: "" },
     subsystems: {},
+    fans: { enabled: false, mode: "auto", manualSpeed: 20, healthState: "normal", shelves: [] },
     uptimeSampledAt: Date.now()
   };
   var banner = null;
   var refreshTimer = null;
   var clockTimer = null;
   var resizeObserver = null;
+  var fanBusy = false;
 
   function normalizeState(value) {
     value = String(value || "unknown").toLowerCase();
@@ -2058,6 +2134,74 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
     return item;
   }
 
+  function setFanMode(value) {
+    if (fanBusy || !state.fans.enabled) return;
+    var manual = value !== "auto";
+    var speed = manual ? Number(value) : Number(state.fans.manualSpeed || 20);
+    var prompt = manual
+      ? "Set both MD1200 shelves to " + speed + "% manual fan speed?"
+      : "Return both MD1200 shelves to automatic temperature control?";
+    if (!window.confirm(prompt)) {
+      renderFans();
+      return;
+    }
+
+    fanBusy = true;
+    renderFans();
+    var body = new URLSearchParams();
+    body.set("csrf_token", csrfToken);
+    body.set("mode", manual ? "manual" : "auto");
+    if (manual) body.set("speed", String(speed));
+    fetch(fanEndpoint, {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body: body.toString()
+    })
+      .then(function (response) {
+        return response.json().then(function (payload) {
+          if (!response.ok) throw new Error(payload.error || "Fan control update failed");
+          state.fans = Object.assign({}, state.fans, payload);
+        });
+      })
+      .catch(function (error) {
+        window.alert(error.message || "Fan control update failed");
+      })
+      .finally(function () {
+        fanBusy = false;
+        renderFans();
+        window.setTimeout(refresh, 1200);
+      });
+  }
+
+  function createFanControl() {
+    var control = document.createElement("span");
+    control.className = "waz-health__fans";
+    control.dataset.field = "fans";
+    control.innerHTML = '<span class="waz-health__fans-label"><span class="waz-health__dot" aria-hidden="true"></span>MD1200</span>' +
+      '<span class="waz-health__fan-readings"><span data-fan-shelf="top">TOP —</span><span data-fan-shelf="bottom">BOTTOM —</span></span>';
+
+    var select = document.createElement("select");
+    select.className = "waz-health__fan-select";
+    select.setAttribute("aria-label", "MD1200 fan control mode and manual speed");
+    [
+      ["auto", "AUTO"],
+      ["20", "MANUAL 20%"],
+      ["30", "MANUAL 30%"],
+      ["40", "MANUAL 40%"],
+      ["50", "MANUAL 50%"]
+    ].forEach(function (entry) {
+      var option = document.createElement("option");
+      option.value = entry[0];
+      option.textContent = entry[1];
+      select.appendChild(option);
+    });
+    select.addEventListener("change", function () { setFanMode(select.value); });
+    control.appendChild(select);
+    return control;
+  }
+
   function createBanner() {
     var root = document.createElement("section");
     root.id = "waz-health-banner";
@@ -2089,6 +2233,10 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
 
     var dividerTwo = dividerOne.cloneNode(true);
 
+    var fanControl = createFanControl();
+
+    var dividerThree = dividerOne.cloneNode(true);
+
     var meta = document.createElement("span");
     meta.className = "waz-health__meta";
     meta.innerHTML = '<time class="waz-health__time" data-field="time"></time><span class="waz-health__uptime"><span aria-hidden="true">↑</span><span data-field="uptime">—</span></span>';
@@ -2098,6 +2246,8 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
     inner.appendChild(dividerOne);
     inner.appendChild(subsystems);
     inner.appendChild(dividerTwo);
+    inner.appendChild(fanControl);
+    inner.appendChild(dividerThree);
     inner.appendChild(meta);
     root.appendChild(inner);
 
@@ -2200,8 +2350,47 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
       item.setAttribute("aria-label", (value.label || key) + ": " + normalizeState(value.state));
     });
 
+    renderFans();
+
     renderIssues();
     updateClockAndUptime();
+  }
+
+  function renderFans() {
+    if (!banner) return;
+    var control = banner.querySelector('[data-field="fans"]');
+    if (!control) return;
+    var fans = state.fans || {};
+    var enabled = fans.enabled === true;
+    var mode = fans.mode === "manual" ? "manual" : "auto";
+    var select = control.querySelector("select");
+    var readings = control.querySelector(".waz-health__fan-readings");
+    control.dataset.state = enabled ? normalizeState(fans.healthState || "unknown") : "unknown";
+    control.classList.toggle("waz-health__fans--disabled", !enabled);
+    control.classList.toggle("waz-health__fans--manual", mode === "manual");
+    if (select) {
+      select.value = mode === "manual" ? String(fans.manualSpeed || 20) : "auto";
+      select.disabled = !enabled || fanBusy;
+      select.title = enabled ? "Controls both MD1200 shelves" : "Controller is staged but not enabled";
+    }
+    if (readings) readings.hidden = mode !== "auto";
+
+    ["top", "bottom"].forEach(function (id) {
+      var node = control.querySelector('[data-fan-shelf="' + id + '"]');
+      if (!node) return;
+      var shelf = (fans.shelves || []).find(function (item) { return item.id === id; }) || {};
+      var rpm = Number(shelf.averageRpm);
+      node.textContent = id.toUpperCase() + " " + (Number.isFinite(rpm) && rpm > 0 ? Math.round(rpm) + " RPM" : "—");
+      node.title = [
+        shelf.name || ("MD1200 " + id),
+        shelf.temperatureC == null ? "temperature unavailable" : shelf.temperatureC + "°C from " + (shelf.temperatureSource || "assigned disks"),
+        shelf.targetPercent == null ? "target unavailable" : shelf.targetPercent + "% target",
+        shelf.telemetryMessage || "fan telemetry current"
+      ].join(" · ");
+    });
+    control.setAttribute("aria-label", enabled
+      ? "MD1200 fan control: " + mode + (mode === "manual" ? " at " + fans.manualSpeed + " percent" : "")
+      : "MD1200 fan control is staged but disabled");
   }
 
   function mergeSnapshot(next) {
@@ -2215,6 +2404,9 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
     }
     if (next.subsystems && typeof next.subsystems === "object") {
       state.subsystems = Object.assign({}, state.subsystems, next.subsystems);
+    }
+    if (next.fans && typeof next.fans === "object") {
+      state.fans = Object.assign({}, state.fans, next.fans);
     }
     render();
   }
@@ -2280,7 +2472,7 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
   }
 
   window.WAZHealth = {
-    version: "0.7.0",
+    version: "0.8.0",
     refresh: refresh,
     setState: function (next) {
       mergeSnapshot(next);
@@ -2750,6 +2942,7 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
   storageLoop();
 })();
 
+
 ]]>
 </INLINE>
 </FILE>
@@ -3193,6 +3386,7 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
   snapshotLoop();
   hbaLoop();
 })();
+
 
 ]]>
 </INLINE>
@@ -3747,6 +3941,7 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
   workloadsLoop();
 })();
 
+
 ]]>
 </INLINE>
 </FILE>
@@ -4136,6 +4331,7 @@ while (!$stop) {
         sleep(2);
     }
 }
+
 
 ]]>
 </INLINE>
@@ -4715,17 +4911,575 @@ function waz_health_snapshot(): array
         'cooling' => waz_health_merge_status(waz_health_status_from_config($config, 'cooling'), waz_health_cooling_status($config)),
         'ups' => waz_health_merge_status(waz_health_status_from_config($config, 'ups'), waz_health_ups_status($config)),
     ];
+    $fans = [
+        'enabled' => false,
+        'mode' => 'auto',
+        'manualSpeed' => 20,
+        'allowedManualSpeeds' => [20, 30, 40, 50],
+        'healthState' => 'normal',
+        'message' => '',
+        'stale' => true,
+        'shelves' => [],
+    ];
+    $md1200Library = __DIR__ . '/md1200.php';
+    if (is_file($md1200Library)) {
+        require_once $md1200Library;
+        if (function_exists('waz_md1200_public_status')) {
+            $fans = waz_md1200_public_status();
+            if (($fans['enabled'] ?? false) && waz_health_state_rank((string) ($fans['healthState'] ?? 'normal')) > 0) {
+                $subsystems['cooling'] = waz_health_merge_status($subsystems['cooling'], [
+                    'label' => 'COOLING',
+                    'state' => (string) ($fans['healthState'] ?? 'attention'),
+                    'message' => trim((string) ($fans['message'] ?? 'MD1200 fan control requires attention')),
+                    'metrics' => ['md1200' => $fans],
+                ]);
+            }
+        }
+    }
     return [
         'schemaVersion' => 2,
-        'pluginVersion' => '0.7.0',
+        'pluginVersion' => '0.8.0',
         'server' => [
             'label' => trim((string) $config['DISPLAY_NAME']) ?: 'WAZ-SERVER',
             'uptimeSeconds' => waz_health_uptime_seconds(),
         ],
         'overall' => waz_health_overall_status($config, $subsystems),
         'subsystems' => $subsystems,
+        'fans' => $fans,
         'generatedAt' => time(),
     ];
+}
+
+]]>
+</INLINE>
+</FILE>
+<FILE Name="/usr/local/emhttp/plugins/waz.dashboard/include/md1200-control.php">
+<INLINE>
+<![CDATA[
+<?php
+
+declare(strict_types=1);
+
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+
+require_once __DIR__ . '/md1200.php';
+
+try {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        $expected = waz_md1200_expected_csrf();
+        $provided = trim((string) ($_POST['csrf_token'] ?? ''));
+        if ($expected === '' || !hash_equals($expected, $provided)) {
+            http_response_code(403);
+            throw new RuntimeException('The Unraid session token was not accepted');
+        }
+
+        $mode = strtolower(trim((string) ($_POST['mode'] ?? '')));
+        if (!in_array($mode, ['auto', 'manual'], true)) {
+            throw new InvalidArgumentException('Mode must be auto or manual');
+        }
+        $updates = ['MD1200_MODE' => $mode];
+        if ($mode === 'manual') {
+            $speed = (int) ($_POST['speed'] ?? 0);
+            if (!in_array($speed, [20, 30, 40, 50], true)) {
+                throw new InvalidArgumentException('Manual speed must be 20, 30, 40, or 50 percent');
+            }
+            $updates['MD1200_MANUAL_SPEED'] = (string) $speed;
+        }
+        waz_md1200_update_config($updates);
+    }
+
+    echo json_encode(waz_md1200_public_status(), JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+} catch (InvalidArgumentException $error) {
+    http_response_code(422);
+    echo json_encode(['error' => $error->getMessage()], JSON_UNESCAPED_SLASHES);
+} catch (Throwable $error) {
+    if (http_response_code() < 400) http_response_code(500);
+    echo json_encode(['error' => $error->getMessage()], JSON_UNESCAPED_SLASHES);
+}
+
+]]>
+</INLINE>
+</FILE>
+<FILE Name="/usr/local/emhttp/plugins/waz.dashboard/include/md1200-controller.php">
+<INLINE>
+<![CDATA[
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/md1200.php';
+
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
+
+$options = getopt('', ['once', 'dry-run', 'config:', 'disks:', 'state:', 'fixture-dir:']);
+$runOnce = array_key_exists('once', $options);
+$dryRun = array_key_exists('dry-run', $options);
+$configPath = isset($options['config']) ? (string) $options['config'] : WAZ_MD1200_CONFIG;
+$disksPath = isset($options['disks']) ? (string) $options['disks'] : '/var/local/emhttp/disks.ini';
+$statePath = isset($options['state']) ? (string) $options['state'] : WAZ_MD1200_STATE;
+$fixtureDirectory = isset($options['fixture-dir']) ? (string) $options['fixture-dir'] : '';
+$running = true;
+
+if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
+    pcntl_async_signals(true);
+    pcntl_signal(SIGTERM, static function () use (&$running): void { $running = false; });
+    pcntl_signal(SIGINT, static function () use (&$running): void { $running = false; });
+}
+
+function waz_md1200_controller_number(array $config, string $key, float $fallback): float
+{
+    $value = $config[$key] ?? null;
+    return is_numeric($value) ? (float) $value : $fallback;
+}
+
+function waz_md1200_controller_list(string $value): array
+{
+    return array_values(array_unique(array_filter(array_map('trim', explode(',', $value)), static fn(string $item): bool => $item !== '')));
+}
+
+function waz_md1200_controller_shelves(array $config): array
+{
+    $result = [];
+    foreach (['top' => 'TOP', 'bottom' => 'BOTTOM'] as $id => $prefix) {
+        $result[] = [
+            'id' => $id,
+            'name' => trim((string) ($config['MD1200_' . $prefix . '_NAME'] ?? 'MD1200 ' . ucfirst($id))),
+            'port' => trim((string) ($config['MD1200_' . $prefix . '_PORT'] ?? '')),
+            'sesDevice' => trim((string) ($config['MD1200_' . $prefix . '_SES_DEVICE'] ?? '')),
+            'disks' => waz_md1200_controller_list((string) ($config['MD1200_' . $prefix . '_DISKS'] ?? '')),
+        ];
+    }
+    return $result;
+}
+
+function waz_md1200_controller_disks(string $path): array
+{
+    $values = is_file($path) ? @parse_ini_file($path, true, INI_SCANNER_RAW) : [];
+    if (!is_array($values)) return [];
+    $result = [];
+    foreach ($values as $section => $disk) {
+        if (!is_array($disk)) continue;
+        $name = trim((string) ($disk['name'] ?? $section));
+        $result[strtolower($name)] = $disk;
+    }
+    return $result;
+}
+
+function waz_md1200_controller_spun_down(array $disk): bool
+{
+    $explicit = strtolower(trim((string) ($disk['spundown'] ?? '')));
+    if (in_array($explicit, ['1', 'yes', 'true', 'on'], true)) return true;
+    return str_contains(strtolower((string) ($disk['color'] ?? '')), 'blink');
+}
+
+function waz_md1200_controller_temperature(array $assigned, array $disks): array
+{
+    $temperatures = [];
+    $active = 0;
+    $seen = 0;
+    foreach ($assigned as $name) {
+        $disk = $disks[strtolower($name)] ?? null;
+        if (!is_array($disk)) continue;
+        $seen++;
+        if (!waz_md1200_controller_spun_down($disk)) $active++;
+        $raw = trim((string) ($disk['temp'] ?? ''));
+        if (is_numeric($raw) && (float) $raw > 0.0) $temperatures[$name] = (float) $raw;
+    }
+    arsort($temperatures, SORT_NUMERIC);
+    $hottestName = $temperatures ? (string) array_key_first($temperatures) : null;
+    return [
+        'temperatureC' => $hottestName === null ? null : round((float) $temperatures[$hottestName], 1),
+        'temperatureSource' => $hottestName,
+        'allSpunDown' => $seen > 0 && $active === 0,
+        'assignedSeen' => $seen,
+        'activeDisks' => $active,
+    ];
+}
+
+function waz_md1200_controller_auto_target(array $config, array $thermal, ?int $previous): array
+{
+    $cool = (int) waz_md1200_controller_number($config, 'MD1200_SPEED_COOL', 20);
+    $warm = (int) waz_md1200_controller_number($config, 'MD1200_SPEED_WARM', 25);
+    $hot = (int) waz_md1200_controller_number($config, 'MD1200_SPEED_HOT', 30);
+    $veryHot = (int) waz_md1200_controller_number($config, 'MD1200_SPEED_VERY_HOT', 50);
+    $sensorFailure = (int) waz_md1200_controller_number($config, 'MD1200_SENSOR_FAILURE_SPEED', 50);
+    if ($thermal['allSpunDown']) return ['speed' => $cool, 'reason' => 'assigned disks spun down'];
+    if ($thermal['temperatureC'] === null) return ['speed' => $sensorFailure, 'reason' => 'temperature unavailable; fail-safe'];
+
+    $temperature = (float) $thermal['temperatureC'];
+    $warmAt = waz_md1200_controller_number($config, 'MD1200_THRESHOLD_WARM_C', 35.0);
+    $hotAt = waz_md1200_controller_number($config, 'MD1200_THRESHOLD_HOT_C', 45.0);
+    $veryHotAt = waz_md1200_controller_number($config, 'MD1200_THRESHOLD_VERY_HOT_C', 50.0);
+    $candidate = $temperature >= $veryHotAt ? $veryHot : ($temperature >= $hotAt ? $hot : ($temperature >= $warmAt ? $warm : $cool));
+
+    if ($previous !== null && $candidate < $previous) {
+        $hysteresis = max(0.0, waz_md1200_controller_number($config, 'MD1200_HYSTERESIS_C', 1.0));
+        $lowerAt = $previous >= $veryHot ? $veryHotAt : ($previous >= $hot ? $hotAt : $warmAt);
+        if ($temperature >= ($lowerAt - $hysteresis)) $candidate = $previous;
+    }
+    return ['speed' => $candidate, 'reason' => ($thermal['temperatureSource'] ?? 'disk') . ' ' . $temperature . '°C'];
+}
+
+function waz_md1200_controller_docker_running(): bool
+{
+    $lines = [];
+    $exitCode = 1;
+    @exec("docker ps --format '{{.Names}}' 2>/dev/null", $lines, $exitCode);
+    if ($exitCode !== 0) return false;
+    foreach ($lines as $name) {
+        if (strcasecmp(trim((string) $name), 'MD1200-Fan-Controller') === 0) return true;
+    }
+    return false;
+}
+
+function waz_md1200_controller_send(string $port, int $speed, bool $dryRun): array
+{
+    if ($dryRun) return ['state' => 'dry-run', 'message' => 'Dry run; no serial write'];
+    if ($port === '' || !file_exists($port)) return ['state' => 'fault', 'message' => 'Serial adapter is missing'];
+
+    $lockPath = '/var/run/waz.dashboard/md1200-' . substr(sha1($port), 0, 12) . '.lock';
+    $lock = @fopen($lockPath, 'c+');
+    if ($lock === false || !@flock($lock, LOCK_EX | LOCK_NB)) {
+        if (is_resource($lock)) fclose($lock);
+        return ['state' => 'fault', 'message' => 'Serial adapter is already in use'];
+    }
+    try {
+        $lines = [];
+        $exitCode = 1;
+        $command = 'stty -F ' . escapeshellarg($port) . ' 38400 raw -echo -crtscts -hupcl cs8 -cstopb -parenb';
+        @exec($command . ' 2>/dev/null', $lines, $exitCode);
+        if ($exitCode !== 0) return ['state' => 'fault', 'message' => 'Unable to configure serial adapter'];
+
+        $handle = @fopen($port, 'w');
+        if ($handle === false) return ['state' => 'fault', 'message' => 'Unable to open serial adapter'];
+        $payload = 'set_speed ' . $speed . "\r\n";
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            $written = @fwrite($handle, $payload);
+            @fflush($handle);
+            if ($written === false || $written !== strlen($payload)) {
+                fclose($handle);
+                return ['state' => 'fault', 'message' => 'Serial command write failed'];
+            }
+            usleep(100000);
+        }
+        fclose($handle);
+        return ['state' => 'sent', 'message' => 'Command sent; awaiting independent fan telemetry'];
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+}
+
+function waz_md1200_controller_rpm(string $id, string $device, string $fixtureDirectory): array
+{
+    if ($fixtureDirectory !== '') {
+        $fixture = rtrim($fixtureDirectory, '/\\') . DIRECTORY_SEPARATOR . $id . '.txt';
+        $output = is_file($fixture) ? (string) @file_get_contents($fixture) : '';
+    } elseif ($device === '') {
+        return ['state' => 'unconfigured', 'averageRpm' => null, 'fanCount' => 0, 'message' => 'SES device is not mapped'];
+    } elseif (!file_exists($device)) {
+        return ['state' => 'fault', 'averageRpm' => null, 'fanCount' => 0, 'message' => 'SES device is missing'];
+    } else {
+        $binary = trim((string) @shell_exec('command -v sg_ses 2>/dev/null'));
+        if ($binary === '') return ['state' => 'unavailable', 'averageRpm' => null, 'fanCount' => 0, 'message' => 'sg_ses is unavailable'];
+        $lines = [];
+        $exitCode = 1;
+        @exec(escapeshellarg($binary) . ' -p es ' . escapeshellarg($device) . ' 2>/dev/null', $lines, $exitCode);
+        if ($exitCode !== 0) return ['state' => 'fault', 'averageRpm' => null, 'fanCount' => 0, 'message' => 'SES telemetry read failed'];
+        $output = implode("\n", $lines);
+    }
+
+    preg_match_all('/Actual\s+speed\s*=\s*([0-9]+)\s*rpm/i', $output, $matches);
+    $values = array_values(array_filter(array_map('intval', $matches[1] ?? []), static fn(int $rpm): bool => $rpm > 0));
+    if (!$values) return ['state' => 'unavailable', 'averageRpm' => null, 'fanCount' => 0, 'message' => 'No fan RPM values were reported'];
+    return [
+        'state' => 'normal',
+        'averageRpm' => (int) round(array_sum($values) / count($values)),
+        'fanCount' => count($values),
+        'message' => '',
+    ];
+}
+
+function waz_md1200_controller_write_state(string $path, array $state): void
+{
+    $directory = dirname($path);
+    if (!is_dir($directory)) @mkdir($directory, 0755, true);
+    $encoded = json_encode($state, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    if ($encoded === false) return;
+    $temporary = $path . '.tmp.' . getmypid();
+    if (@file_put_contents($temporary, $encoded . "\n", LOCK_EX) !== false) {
+        @chmod($temporary, 0644);
+        @rename($temporary, $path);
+    }
+}
+
+$previousTargets = [];
+$lastCommands = [];
+$previousMode = null;
+$nextPollAt = 0;
+$lastConfigSignature = '';
+
+while ($running) {
+    clearstatcache(true, $configPath);
+    $signature = is_file($configPath) ? (string) @sha1_file($configPath) : '';
+    $config = waz_md1200_read_config($configPath);
+    $pollSeconds = max(5, (int) waz_md1200_controller_number($config, 'MD1200_POLL_SECONDS', 30));
+    $configChanged = $signature !== $lastConfigSignature;
+    if (!$runOnce && !$configChanged && time() < $nextPollAt) {
+        sleep(1);
+        continue;
+    }
+    $lastConfigSignature = $signature;
+    $nextPollAt = time() + $pollSeconds;
+
+    $enabled = waz_md1200_enabled($config);
+    $mode = waz_md1200_mode($config);
+    $manualSpeed = waz_md1200_manual_speed($config);
+    $dockerConflict = $enabled && waz_md1200_controller_docker_running();
+    $disks = waz_md1200_controller_disks($disksPath);
+    $shelfStates = [];
+    $controllerState = 'normal';
+    $messages = [];
+
+    if (!$enabled) $messages[] = 'Controller disabled until migration is approved';
+    if ($dockerConflict) {
+        $controllerState = 'fault';
+        $messages[] = 'Docker controller is still running; serial writes blocked';
+    }
+
+    foreach (waz_md1200_controller_shelves($config) as $shelf) {
+        $id = $shelf['id'];
+        $thermal = waz_md1200_controller_temperature($shelf['disks'], $disks);
+        $auto = waz_md1200_controller_auto_target($config, $thermal, $previousMode === 'auto' ? ($previousTargets[$id] ?? null) : null);
+        $target = $mode === 'manual' ? $manualSpeed : (int) $auto['speed'];
+        $reason = $mode === 'manual' ? 'manual selection' : (string) $auto['reason'];
+        $lastCommand = $lastCommands[$id] ?? null;
+        $reassert = max(30, (int) waz_md1200_controller_number($config, 'MD1200_REASSERT_SECONDS', 900));
+        $commandDue = $enabled && !$dockerConflict && (
+            $configChanged || $lastCommand === null || ($previousTargets[$id] ?? null) !== $target || (time() - (int) $lastCommand) >= $reassert
+        );
+        $write = ['state' => $enabled ? 'idle' : 'disabled', 'message' => $enabled ? 'No command due' : 'Controller disabled'];
+        if ($commandDue) {
+            $write = waz_md1200_controller_send((string) $shelf['port'], $target, $dryRun);
+            if (in_array($write['state'], ['sent', 'dry-run'], true)) $lastCommands[$id] = time();
+        }
+        $telemetry = waz_md1200_controller_rpm($id, (string) $shelf['sesDevice'], $fixtureDirectory);
+
+        if ($enabled && $write['state'] === 'fault') {
+            $controllerState = 'fault';
+            $messages[] = $shelf['name'] . ': ' . $write['message'];
+        } elseif ($enabled && $telemetry['state'] !== 'normal' && $controllerState !== 'fault') {
+            $controllerState = 'attention';
+            $messages[] = $shelf['name'] . ': ' . $telemetry['message'];
+        }
+
+        $shelfStates[] = [
+            'id' => $id,
+            'name' => $shelf['name'],
+            'assignedDisks' => $shelf['disks'],
+            'assignedSeen' => $thermal['assignedSeen'],
+            'activeDisks' => $thermal['activeDisks'],
+            'temperatureC' => $thermal['temperatureC'],
+            'temperatureSource' => $thermal['temperatureSource'],
+            'targetPercent' => $target,
+            'targetReason' => $reason,
+            'writeState' => $write['state'],
+            'writeMessage' => $write['message'],
+            'lastCommandAt' => $lastCommands[$id] ?? null,
+            'telemetryState' => $telemetry['state'],
+            'averageRpm' => $telemetry['averageRpm'],
+            'fanCount' => $telemetry['fanCount'],
+            'telemetryMessage' => $telemetry['message'],
+        ];
+        $previousTargets[$id] = $target;
+    }
+    $previousMode = $mode;
+
+    waz_md1200_controller_write_state($statePath, [
+        'schemaVersion' => 1,
+        'generatedAt' => time(),
+        'controller' => [
+            'enabled' => $enabled,
+            'mode' => $mode,
+            'manualSpeed' => $manualSpeed,
+            'state' => $controllerState,
+            'message' => implode(' · ', array_values(array_unique($messages))),
+            'dockerConflict' => $dockerConflict,
+            'dryRun' => $dryRun,
+        ],
+        'shelves' => $shelfStates,
+    ]);
+
+    if ($runOnce) break;
+}
+
+]]>
+</INLINE>
+</FILE>
+<FILE Name="/usr/local/emhttp/plugins/waz.dashboard/include/md1200.php">
+<INLINE>
+<![CDATA[
+<?php
+
+declare(strict_types=1);
+
+const WAZ_MD1200_CONFIG = '/boot/config/plugins/waz.dashboard/waz.dashboard.cfg';
+const WAZ_MD1200_STATE = '/var/run/waz.dashboard/md1200.json';
+const WAZ_MD1200_PID = '/var/run/waz.dashboard/md1200-controller.pid';
+
+function waz_md1200_defaults(): array
+{
+    return [
+        'MD1200_ENABLED' => 'no',
+        'MD1200_MODE' => 'auto',
+        'MD1200_MANUAL_SPEED' => '20',
+        'MD1200_POLL_SECONDS' => '30',
+        'MD1200_REASSERT_SECONDS' => '900',
+        'MD1200_SENSOR_FAILURE_SPEED' => '50',
+        'MD1200_HYSTERESIS_C' => '1',
+        'MD1200_THRESHOLD_WARM_C' => '35',
+        'MD1200_THRESHOLD_HOT_C' => '45',
+        'MD1200_THRESHOLD_VERY_HOT_C' => '50',
+        'MD1200_SPEED_COOL' => '20',
+        'MD1200_SPEED_WARM' => '25',
+        'MD1200_SPEED_HOT' => '30',
+        'MD1200_SPEED_VERY_HOT' => '50',
+        'MD1200_TOP_NAME' => 'MD1200 Top',
+        'MD1200_TOP_PORT' => '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE33O9T-if00-port0',
+        'MD1200_TOP_SES_DEVICE' => '',
+        'MD1200_TOP_DISKS' => 'disk1,disk2,disk3,disk4,parity,parity2',
+        'MD1200_BOTTOM_NAME' => 'MD1200 Bottom',
+        'MD1200_BOTTOM_PORT' => '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE32AB2-if00-port0',
+        'MD1200_BOTTOM_SES_DEVICE' => '/dev/sg11',
+        'MD1200_BOTTOM_DISKS' => 'disk5,disk6,disk7,disk8,disk9,disk10,disk11,disk12,disk13,disk14,disk15',
+        'MD1200_BACKUP_DIR' => '/mnt/user/Back-Up/MD1200-Fan-Controller',
+    ];
+}
+
+function waz_md1200_read_config(?string $path = null): array
+{
+    $path = $path ?: WAZ_MD1200_CONFIG;
+    $configured = is_file($path) ? @parse_ini_file($path, false, INI_SCANNER_RAW) : [];
+    return array_merge(waz_md1200_defaults(), is_array($configured) ? $configured : []);
+}
+
+function waz_md1200_enabled(array $config): bool
+{
+    return in_array(strtolower(trim((string) ($config['MD1200_ENABLED'] ?? 'no'))), ['1', 'yes', 'true', 'on'], true);
+}
+
+function waz_md1200_mode(array $config): string
+{
+    return strtolower(trim((string) ($config['MD1200_MODE'] ?? 'auto'))) === 'manual' ? 'manual' : 'auto';
+}
+
+function waz_md1200_manual_speed(array $config): int
+{
+    $speed = (int) ($config['MD1200_MANUAL_SPEED'] ?? 20);
+    return in_array($speed, [20, 30, 40, 50], true) ? $speed : 20;
+}
+
+function waz_md1200_read_state(?string $path = null): array
+{
+    $path = $path ?: WAZ_MD1200_STATE;
+    $raw = @file_get_contents($path);
+    if ($raw === false || trim($raw) === '') {
+        return [];
+    }
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function waz_md1200_public_status(): array
+{
+    $config = waz_md1200_read_config();
+    $state = waz_md1200_read_state();
+    $generatedAt = isset($state['generatedAt']) && is_numeric($state['generatedAt']) ? (int) $state['generatedAt'] : null;
+    $poll = max(5, (int) ($config['MD1200_POLL_SECONDS'] ?? 30));
+    $stale = $generatedAt === null || (time() - $generatedAt) > max(75, ($poll * 2) + 15);
+    $enabled = waz_md1200_enabled($config);
+    $controller = is_array($state['controller'] ?? null) ? $state['controller'] : [];
+    $shelves = is_array($state['shelves'] ?? null) ? array_values($state['shelves']) : [];
+
+    $healthState = 'normal';
+    $message = '';
+    if ($enabled && $stale) {
+        $healthState = 'fault';
+        $message = 'MD1200 controller status is stale';
+    } elseif ($enabled) {
+        $candidate = strtolower((string) ($controller['state'] ?? 'unknown'));
+        $healthState = in_array($candidate, ['normal', 'attention', 'fault'], true) ? $candidate : 'attention';
+        $message = trim((string) ($controller['message'] ?? ''));
+    }
+
+    return [
+        'enabled' => $enabled,
+        'mode' => waz_md1200_mode($config),
+        'manualSpeed' => waz_md1200_manual_speed($config),
+        'allowedManualSpeeds' => [20, 30, 40, 50],
+        'healthState' => $healthState,
+        'message' => $message,
+        'stale' => $stale,
+        'generatedAt' => $generatedAt,
+        'shelves' => $shelves,
+    ];
+}
+
+function waz_md1200_expected_csrf(): string
+{
+    $values = is_file('/var/local/emhttp/var.ini')
+        ? @parse_ini_file('/var/local/emhttp/var.ini', false, INI_SCANNER_RAW)
+        : [];
+    return is_array($values) ? trim((string) ($values['csrf_token'] ?? '')) : '';
+}
+
+function waz_md1200_quote_ini(string $value): string
+{
+    return '"' . str_replace(['\\', '"', "\r", "\n"], ['\\\\', '\\"', '', ''], $value) . '"';
+}
+
+function waz_md1200_update_config(array $updates, ?string $path = null): void
+{
+    $path = $path ?: WAZ_MD1200_CONFIG;
+    $directory = dirname($path);
+    if (!is_dir($directory) && !@mkdir($directory, 0755, true) && !is_dir($directory)) {
+        throw new RuntimeException('Unable to create controller configuration directory');
+    }
+
+    $lock = @fopen($path . '.lock', 'c+');
+    if ($lock === false || !@flock($lock, LOCK_EX)) {
+        if (is_resource($lock)) fclose($lock);
+        throw new RuntimeException('Unable to lock controller configuration');
+    }
+    try {
+        $text = is_file($path) ? (string) @file_get_contents($path) : '';
+        foreach ($updates as $key => $value) {
+            if (!preg_match('/^MD1200_[A-Z0-9_]+$/', (string) $key)) {
+                throw new InvalidArgumentException('Unsupported controller setting');
+            }
+            $line = $key . '=' . waz_md1200_quote_ini((string) $value);
+            $pattern = '/^' . preg_quote((string) $key, '/') . '=.*$/m';
+            if (preg_match($pattern, $text)) {
+                $text = (string) preg_replace($pattern, $line, $text, 1);
+            } else {
+                $text = rtrim($text) . ($text === '' ? '' : "\n") . $line . "\n";
+            }
+        }
+        $temporary = $path . '.tmp.' . getmypid();
+        if (@file_put_contents($temporary, $text, LOCK_EX) === false || !@rename($temporary, $path)) {
+            @unlink($temporary);
+            throw new RuntimeException('Unable to save controller configuration');
+        }
+        @chmod($path, 0644);
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
 }
 
 ]]>
@@ -4742,7 +5496,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 
-const WAZ_DASHBOARD_VERSION = '0.7.0';
+const WAZ_DASHBOARD_VERSION = '0.8.0';
 const WAZ_DASHBOARD_CONFIG = '/boot/config/plugins/waz.dashboard/waz.dashboard.cfg';
 const WAZ_DASHBOARD_STATE = '/var/run/waz.dashboard';
 
@@ -5192,6 +5946,7 @@ try {
     ], JSON_UNESCAPED_SLASHES);
 }
 
+
 ]]>
 </INLINE>
 </FILE>
@@ -5218,6 +5973,7 @@ try {
     ], JSON_UNESCAPED_SLASHES);
 }
 
+
 ]]>
 </INLINE>
 </FILE>
@@ -5232,7 +5988,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 
-const WAZ_STORAGE_VERSION = '0.7.0';
+const WAZ_STORAGE_VERSION = '0.8.0';
 const WAZ_STORAGE_WARN_PERCENT = 95.0;
 const WAZ_STORAGE_FAULT_PERCENT = 98.0;
 const WAZ_DISKS_INI = '/var/local/emhttp/disks.ini';
@@ -5940,6 +6696,7 @@ try {
     ], JSON_UNESCAPED_SLASHES);
 }
 
+
 ]]>
 </INLINE>
 </FILE>
@@ -5954,7 +6711,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 
-const WAZ_WORKLOADS_VERSION = '0.7.0';
+const WAZ_WORKLOADS_VERSION = '0.8.0';
 const WAZ_WORKLOADS_FOLDER_CONFIGS = [
     '/boot/config/plugins/folderview.plus/docker.json',
     '/boot/config/plugins/folder.view3/docker.json',
@@ -6696,6 +7453,53 @@ try {
 ob_end_clean();
 echo json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
 
+
+]]>
+</INLINE>
+</FILE>
+<FILE Name="/usr/local/emhttp/plugins/waz.dashboard/scripts/backup-md1200.sh">
+<INLINE>
+<![CDATA[
+#!/bin/bash
+set -euo pipefail
+
+CONFIG_FILE="/boot/config/plugins/waz.dashboard/waz.dashboard.cfg"
+STATE_FILE="/var/run/waz.dashboard/md1200.json"
+DEFAULT_BACKUP_DIR="/mnt/user/Back-Up/MD1200-Fan-Controller"
+BACKUP_DIR="$DEFAULT_BACKUP_DIR"
+
+if [ -f "$CONFIG_FILE" ]; then
+  CONFIGURED="$(sed -n 's/^MD1200_BACKUP_DIR="\(.*\)"$/\1/p' "$CONFIG_FILE" | head -n1)"
+  [ -z "$CONFIGURED" ] || BACKUP_DIR="$CONFIGURED"
+fi
+
+if [ ! -d "/mnt/user/Back-Up" ]; then
+  echo "Back-Up share is unavailable; MD1200 backup skipped." >&2
+  exit 0
+fi
+
+STAMP="$(date +%Y%m%d-%H%M%S)"
+DESTINATION="$BACKUP_DIR/$STAMP"
+mkdir -p "$DESTINATION"
+
+copy_if_present() {
+  local SOURCE="$1"
+  local TARGET="$2"
+  [ ! -f "$SOURCE" ] || cp -p "$SOURCE" "$DESTINATION/$TARGET"
+}
+
+copy_if_present "$CONFIG_FILE" "waz.dashboard.cfg"
+copy_if_present "$STATE_FILE" "md1200-status.json"
+copy_if_present "/mnt/cache/appdata/md1200-fan-controller/config/settings.json" "docker-settings.json"
+copy_if_present "/boot/config/plugins/dockerMan/templates-user/my-MD1200-Fan-Controller.xml" "docker-template.xml"
+
+if command -v docker >/dev/null 2>&1 && docker inspect MD1200-Fan-Controller >/dev/null 2>&1; then
+  docker inspect MD1200-Fan-Controller > "$DESTINATION/docker-inspect.json"
+  docker logs --tail 1000 MD1200-Fan-Controller > "$DESTINATION/docker.log" 2>&1 || true
+fi
+
+echo "$DESTINATION"
+
 ]]>
 </INLINE>
 </FILE>
@@ -6706,20 +7510,31 @@ echo json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_IN
 
 RUNTIME_DIR="/usr/local/emhttp/plugins/waz.dashboard"
 STATE_DIR="/var/run/waz.dashboard"
-PID_FILE="$STATE_DIR/gpu-sampler.pid"
+GPU_PID_FILE="$STATE_DIR/gpu-sampler.pid"
+FAN_PID_FILE="$STATE_DIR/md1200-controller.pid"
 
 mkdir -p "$STATE_DIR"
 
-if [ -s "$PID_FILE" ]; then
-  OLD_PID="$(cat "$PID_FILE" 2>/dev/null)"
-  if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
-    exit 0
-  fi
-  rm -f "$PID_FILE"
+pid_matches() {
+  local PID_FILE="$1"
+  local PATTERN="$2"
+  [ -s "$PID_FILE" ] || return 1
+  local PID
+  PID="$(cat "$PID_FILE" 2>/dev/null)"
+  [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null && [ -r "/proc/$PID/cmdline" ] && tr '\0' ' ' < "/proc/$PID/cmdline" | grep -q "$PATTERN"
+}
+
+if ! pid_matches "$GPU_PID_FILE" '/waz.dashboard/include/gpu-sampler.php'; then
+  rm -f "$GPU_PID_FILE"
+  nohup /usr/bin/php "$RUNTIME_DIR/include/gpu-sampler.php" >/dev/null 2>&1 &
+  echo "$!" > "$GPU_PID_FILE"
 fi
 
-nohup /usr/bin/php "$RUNTIME_DIR/include/gpu-sampler.php" >/dev/null 2>&1 &
-echo "$!" > "$PID_FILE"
+if ! pid_matches "$FAN_PID_FILE" '/waz.dashboard/include/md1200-controller.php'; then
+  rm -f "$FAN_PID_FILE"
+  nohup /usr/bin/php "$RUNTIME_DIR/include/md1200-controller.php" >/dev/null 2>&1 &
+  echo "$!" > "$FAN_PID_FILE"
+fi
 
 ]]>
 </INLINE>
@@ -6730,16 +7545,27 @@ echo "$!" > "$PID_FILE"
 #!/bin/bash
 
 STATE_DIR="/var/run/waz.dashboard"
-PID_FILE="$STATE_DIR/gpu-sampler.pid"
 
-if [ -s "$PID_FILE" ]; then
-  PID="$(cat "$PID_FILE" 2>/dev/null)"
-  if [ -n "$PID" ] && [ -r "/proc/$PID/cmdline" ] && tr '\0' ' ' < "/proc/$PID/cmdline" | grep -q '/waz.dashboard/include/gpu-sampler.php'; then
-    kill "$PID" 2>/dev/null || true
+stop_process() {
+  local PID_FILE="$1"
+  local PATTERN="$2"
+  if [ -s "$PID_FILE" ]; then
+    local PID
+    PID="$(cat "$PID_FILE" 2>/dev/null)"
+    if [ -n "$PID" ] && [ -r "/proc/$PID/cmdline" ] && tr '\0' ' ' < "/proc/$PID/cmdline" | grep -q "$PATTERN"; then
+      kill "$PID" 2>/dev/null || true
+      for _ in 1 2 3 4 5; do
+        kill -0 "$PID" 2>/dev/null || break
+        sleep 1
+      done
+    fi
   fi
-fi
+  rm -f "$PID_FILE"
+}
 
-rm -f "$PID_FILE" "$STATE_DIR/gpu.json"
+stop_process "$STATE_DIR/gpu-sampler.pid" '/waz.dashboard/include/gpu-sampler.php'
+stop_process "$STATE_DIR/md1200-controller.pid" '/waz.dashboard/include/md1200-controller.php'
+rm -f "$STATE_DIR/gpu.json" "$STATE_DIR/md1200.json" "$STATE_DIR"/md1200-*.lock
 
 ]]>
 </INLINE>
@@ -6758,7 +7584,7 @@ $pluginname = 'waz.dashboard';
 $mytiles[$pluginname]['column1'] = <<<'EOT'
 <tbody id="waz-system-tile" title="Live processor, memory, graphics, network, power, and cooling telemetry">
 <tr><td>
-  <section class="waz-system" data-version="0.7.0">
+  <section class="waz-system" data-version="0.8.0">
     <header class="waz-system-header">
       <span><b>SERVER STATUS</b><small>Processor, memory, graphics, network, power, and cooling</small></span>
       <span id="waz-system-freshness" class="waz-freshness waz-is-loading"><i></i> CONNECTING</span>
@@ -6822,15 +7648,16 @@ $mytiles[$pluginname]['column1'] = <<<'EOT'
       </div>
       <div id="waz-network-members" class="waz-member-list"><span class="waz-muted">Reading network members…</span></div>
     </section>
-    <footer class="waz-system-footer"><span id="waz-system-updated">Waiting for first snapshot</span><span>v0.7.0</span></footer>
+    <footer class="waz-system-footer"><span id="waz-system-updated">Waiting for first snapshot</span><span>v0.8.0</span></footer>
   </section>
 </td></tr>
 </tbody>
 EOT;
 ?>
 
-<link rel="stylesheet" href="/plugins/waz.dashboard/assets/css/system.css?v=0.7.0">
-<script defer src="/plugins/waz.dashboard/assets/js/system.js?v=0.7.0"></script>
+<link rel="stylesheet" href="/plugins/waz.dashboard/assets/css/system.css?v=0.8.0">
+<script defer src="/plugins/waz.dashboard/assets/js/system.js?v=0.8.0"></script>
+
 
 ]]>
 </INLINE>
@@ -6849,11 +7676,17 @@ $jsFile = $pluginRoot . '/assets/js/banner.js';
 
 $cssVersion = is_file($cssFile) ? filemtime($cssFile) : 0;
 $jsVersion = is_file($jsFile) ? filemtime($jsFile) : 0;
+$varValues = is_file('/var/local/emhttp/var.ini')
+    ? @parse_ini_file('/var/local/emhttp/var.ini', false, INI_SCANNER_RAW)
+    : [];
+$csrfToken = is_array($varValues) ? (string) ($varValues['csrf_token'] ?? '') : '';
 ?>
 <link rel="stylesheet" href="<?=$webRoot?>/assets/css/banner.css?v=<?=$cssVersion?>">
 <script>
 window.WAZHealthBootstrap = <?=json_encode([
     'endpoint' => $webRoot . '/include/status.php',
+    'fanEndpoint' => $webRoot . '/include/md1200-control.php',
+    'csrfToken' => $csrfToken,
     'refreshMs' => 5000,
 ], JSON_UNESCAPED_SLASHES)?>;
 </script>
@@ -6876,7 +7709,7 @@ $pluginname = 'waz.storage';
 $mytiles[$pluginname]['column3'] = <<<'EOT'
 <tbody id="waz-storage-tile" title="Live parity, array, pool, and physical disk telemetry">
 <tr><td>
-  <section class="waz-storage" data-version="0.7.0">
+  <section class="waz-storage" data-version="0.8.0">
     <header class="waz-storage-header">
       <span><b>STORAGE</b><small id="waz-storage-subtitle">Parity, pools, array, and locations</small></span>
       <span id="waz-storage-health" class="waz-storage-health waz-is-loading"><i></i> CONNECTING</span>
@@ -6922,15 +7755,16 @@ $mytiles[$pluginname]['column3'] = <<<'EOT'
       <div id="waz-array-disks" class="waz-array-disks"></div>
     </section>
 
-    <footer class="waz-storage-footer"><span id="waz-storage-updated">Waiting for first snapshot</span><span>v0.7.0</span></footer>
+    <footer class="waz-storage-footer"><span id="waz-storage-updated">Waiting for first snapshot</span><span>v0.8.0</span></footer>
   </section>
 </td></tr>
 </tbody>
 EOT;
 ?>
 
-<link rel="stylesheet" href="/plugins/waz.dashboard/assets/css/storage.css?v=0.7.0">
-<script defer src="/plugins/waz.dashboard/assets/js/storage.js?v=0.7.0"></script>
+<link rel="stylesheet" href="/plugins/waz.dashboard/assets/css/storage.css?v=0.8.0">
+<script defer src="/plugins/waz.dashboard/assets/js/storage.js?v=0.8.0"></script>
+
 
 ]]>
 </INLINE>
@@ -6949,7 +7783,7 @@ $pluginname = 'waz.workloads';
 $mytiles[$pluginname]['column2'] = <<<'EOT'
 <tbody id="waz-workloads-tile" title="Docker workloads, live selected-container telemetry, and top processes">
 <tr><td>
-  <section class="waz-workloads" data-version="0.7.0">
+  <section class="waz-workloads" data-version="0.8.0">
     <header class="waz-workloads-header">
       <span><b>WORKLOADS</b><small id="waz-workloads-subtitle">Docker folders and selected-container telemetry</small></span>
       <span id="waz-workloads-health" class="waz-workloads-health waz-is-loading"><i></i> CONNECTING</span>
@@ -7008,7 +7842,7 @@ $mytiles[$pluginname]['column2'] = <<<'EOT'
 
     </section>
 
-    <footer class="waz-workloads-footer"><span id="waz-workloads-updated">Waiting for first snapshot</span><span>v0.7.0</span></footer>
+    <footer class="waz-workloads-footer"><span id="waz-workloads-updated">Waiting for first snapshot</span><span>v0.8.0</span></footer>
   </section>
   <div id="iframe-popup" style="display:none;-webkit-overflow-scrolling:touch"></div>
 </td></tr>
@@ -7016,9 +7850,10 @@ $mytiles[$pluginname]['column2'] = <<<'EOT'
 EOT;
 ?>
 
-<link rel="stylesheet" href="/plugins/waz.dashboard/assets/css/workloads.css?v=0.7.0">
-<script src="/plugins/dynamix.docker.manager/javascript/docker.js?v=0.7.0"></script>
-<script defer src="/plugins/waz.dashboard/assets/js/workloads.js?v=0.7.0"></script>
+<link rel="stylesheet" href="/plugins/waz.dashboard/assets/css/workloads.css?v=0.8.0">
+<script src="/plugins/dynamix.docker.manager/javascript/docker.js?v=0.8.0"></script>
+<script defer src="/plugins/waz.dashboard/assets/js/workloads.js?v=0.8.0"></script>
+
 
 ]]>
 </INLINE>
@@ -7038,8 +7873,8 @@ LEGACY_HEALTH_PLUGIN="/boot/config/plugins/waz.health.plg"
 chmod 0644 "$RUNTIME_DIR/WazDashboard.page" "$RUNTIME_DIR/WazWorkloads.page" "$RUNTIME_DIR/WazStorage.page" "$RUNTIME_DIR/WazHealthBanner.page"
 chmod 0644 "$RUNTIME_DIR/assets/css/system.css" "$RUNTIME_DIR/assets/css/workloads.css" "$RUNTIME_DIR/assets/css/storage.css" "$RUNTIME_DIR/assets/css/banner.css"
 chmod 0644 "$RUNTIME_DIR/assets/js/system.js" "$RUNTIME_DIR/assets/js/workloads.js" "$RUNTIME_DIR/assets/js/storage.js" "$RUNTIME_DIR/assets/js/banner.js"
-chmod 0644 "$RUNTIME_DIR/include/metrics.php" "$RUNTIME_DIR/include/workloads.php" "$RUNTIME_DIR/include/storage.php" "$RUNTIME_DIR/include/gpu-sampler.php" "$RUNTIME_DIR/include/health.php" "$RUNTIME_DIR/include/status.php"
-chmod 0755 "$RUNTIME_DIR/scripts/start.sh" "$RUNTIME_DIR/scripts/stop.sh"
+chmod 0644 "$RUNTIME_DIR/include/metrics.php" "$RUNTIME_DIR/include/workloads.php" "$RUNTIME_DIR/include/storage.php" "$RUNTIME_DIR/include/gpu-sampler.php" "$RUNTIME_DIR/include/health.php" "$RUNTIME_DIR/include/status.php" "$RUNTIME_DIR/include/md1200.php" "$RUNTIME_DIR/include/md1200-control.php" "$RUNTIME_DIR/include/md1200-controller.php"
+chmod 0755 "$RUNTIME_DIR/scripts/start.sh" "$RUNTIME_DIR/scripts/stop.sh" "$RUNTIME_DIR/scripts/backup-md1200.sh"
 
 php -l "$RUNTIME_DIR/include/metrics.php" >/dev/null
 php -l "$RUNTIME_DIR/include/workloads.php" >/dev/null
@@ -7047,6 +7882,9 @@ php -l "$RUNTIME_DIR/include/storage.php" >/dev/null
 php -l "$RUNTIME_DIR/include/gpu-sampler.php" >/dev/null
 php -l "$RUNTIME_DIR/include/health.php" >/dev/null
 php -l "$RUNTIME_DIR/include/status.php" >/dev/null
+php -l "$RUNTIME_DIR/include/md1200.php" >/dev/null
+php -l "$RUNTIME_DIR/include/md1200-control.php" >/dev/null
+php -l "$RUNTIME_DIR/include/md1200-controller.php" >/dev/null
 
 if [ ! -f "$CONFIG_FILE" ]; then
   cat > "$CONFIG_FILE" <<'WAZ_CONFIG'
@@ -7075,6 +7913,29 @@ FLOW_FAULT_LPH="120"
 THROTTLE_LATCH_SECONDS="300"
 UPS_LOAD_WARN_PERCENT="90"
 UPS_LOAD_FAULT_PERCENT="100"
+MD1200_ENABLED="no"
+MD1200_MODE="auto"
+MD1200_MANUAL_SPEED="20"
+MD1200_POLL_SECONDS="30"
+MD1200_REASSERT_SECONDS="900"
+MD1200_SENSOR_FAILURE_SPEED="50"
+MD1200_HYSTERESIS_C="1"
+MD1200_THRESHOLD_WARM_C="35"
+MD1200_THRESHOLD_HOT_C="45"
+MD1200_THRESHOLD_VERY_HOT_C="50"
+MD1200_SPEED_COOL="20"
+MD1200_SPEED_WARM="25"
+MD1200_SPEED_HOT="30"
+MD1200_SPEED_VERY_HOT="50"
+MD1200_TOP_NAME="MD1200 Top"
+MD1200_TOP_PORT="/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE33O9T-if00-port0"
+MD1200_TOP_SES_DEVICE=""
+MD1200_TOP_DISKS="disk1,disk2,disk3,disk4,parity,parity2"
+MD1200_BOTTOM_NAME="MD1200 Bottom"
+MD1200_BOTTOM_PORT="/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE32AB2-if00-port0"
+MD1200_BOTTOM_SES_DEVICE="/dev/sg11"
+MD1200_BOTTOM_DISKS="disk5,disk6,disk7,disk8,disk9,disk10,disk11,disk12,disk13,disk14,disk15"
+MD1200_BACKUP_DIR="/mnt/user/Back-Up/MD1200-Fan-Controller"
 WAZ_CONFIG
 fi
 
@@ -7103,7 +7964,30 @@ for DEFAULT in \
   'FLOW_FAULT_LPH="120"' \
   'THROTTLE_LATCH_SECONDS="300"' \
   'UPS_LOAD_WARN_PERCENT="90"' \
-  'UPS_LOAD_FAULT_PERCENT="100"'; do
+  'UPS_LOAD_FAULT_PERCENT="100"' \
+  'MD1200_ENABLED="no"' \
+  'MD1200_MODE="auto"' \
+  'MD1200_MANUAL_SPEED="20"' \
+  'MD1200_POLL_SECONDS="30"' \
+  'MD1200_REASSERT_SECONDS="900"' \
+  'MD1200_SENSOR_FAILURE_SPEED="50"' \
+  'MD1200_HYSTERESIS_C="1"' \
+  'MD1200_THRESHOLD_WARM_C="35"' \
+  'MD1200_THRESHOLD_HOT_C="45"' \
+  'MD1200_THRESHOLD_VERY_HOT_C="50"' \
+  'MD1200_SPEED_COOL="20"' \
+  'MD1200_SPEED_WARM="25"' \
+  'MD1200_SPEED_HOT="30"' \
+  'MD1200_SPEED_VERY_HOT="50"' \
+  'MD1200_TOP_NAME="MD1200 Top"' \
+  'MD1200_TOP_PORT="/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE33O9T-if00-port0"' \
+  'MD1200_TOP_SES_DEVICE=""' \
+  'MD1200_TOP_DISKS="disk1,disk2,disk3,disk4,parity,parity2"' \
+  'MD1200_BOTTOM_NAME="MD1200 Bottom"' \
+  'MD1200_BOTTOM_PORT="/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE32AB2-if00-port0"' \
+  'MD1200_BOTTOM_SES_DEVICE="/dev/sg11"' \
+  'MD1200_BOTTOM_DISKS="disk5,disk6,disk7,disk8,disk9,disk10,disk11,disk12,disk13,disk14,disk15"' \
+  'MD1200_BACKUP_DIR="/mnt/user/Back-Up/MD1200-Fan-Controller"'; do
   KEY="${DEFAULT%%=*}"
   if ! grep -q "^${KEY}=" "$CONFIG_FILE"; then
     LEGACY_VALUE=""
@@ -7123,9 +8007,15 @@ if [ -f "$LEGACY_HEALTH_PLUGIN" ]; then
 fi
 rm -rf "/usr/local/emhttp/plugins/waz.health"
 
+if [ ! -f "$CONFIG_DIR/md1200-migration-backed-up" ] && [ -d "/mnt/user/Back-Up" ]; then
+  if "$RUNTIME_DIR/scripts/backup-md1200.sh" >/dev/null; then
+    touch "$CONFIG_DIR/md1200-migration-backed-up"
+  fi
+fi
+
 "$RUNTIME_DIR/scripts/start.sh"
 
-echo "WAZ Dashboard v0.7.0 installed with integrated Health banner. Reload the Unraid WebUI to display it."
+echo "WAZ Dashboard v0.8.0 installed with integrated Health banner. Reload the Unraid WebUI to display it."
 ]]>
 </INLINE>
 </FILE>
@@ -7137,6 +8027,9 @@ RUNTIME_DIR="/usr/local/emhttp/plugins/waz.dashboard"
 
 if [ -x "$RUNTIME_DIR/scripts/stop.sh" ]; then
   "$RUNTIME_DIR/scripts/stop.sh" || true
+fi
+if [ -x "$RUNTIME_DIR/scripts/backup-md1200.sh" ]; then
+  "$RUNTIME_DIR/scripts/backup-md1200.sh" >/dev/null || true
 fi
 rm -rf "$RUNTIME_DIR"
 rm -rf "/boot/config/plugins/waz.dashboard"

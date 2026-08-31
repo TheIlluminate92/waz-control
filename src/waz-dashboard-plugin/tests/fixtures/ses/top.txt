@@ -1,0 +1,5 @@
+Element type: Cooling
+  Element 0 descriptor:
+    Actual speed=1800 rpm, speed code=2
+  Element 1 descriptor:
+    Actual speed=2200 rpm, speed code=2
