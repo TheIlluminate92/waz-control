@@ -5,7 +5,7 @@
 - Replaced the custom MD1200 Docker controller with a host-native WAZ controller process.
 - Added compact MD1200 control to the Health header while shifting subsystem indicators left.
 - Auto mode displays separate Top and Bottom average fan RPM from SES telemetry.
-- Manual mode offers confirmed 20%, 30%, 40%, and 50% commands for both shelves.
+- Manual mode offers staged 20%, 30%, 40%, and 50% commands for both shelves; hardware response still requires commissioning.
 - Preserved independent disk-temperature control per shelf with hysteresis and periodic reassertion.
 - Restored a distinct 50% very-hot and sensor-failure step instead of silently remaining at 30%.
 - Blocked controller writes while the legacy Docker container is running.
@@ -13,7 +13,8 @@
 - Staged fan control disabled by default and added migration backups under the `Back-Up` share.
 - Added a read-only SES mapping diagnostic that writes its results under the `Back-Up` share.
 - Mapped the 24 TB Top shelf to SCSI address `0:0:18:0` and the 14 TB Bottom shelf to `0:0:11:0`, with runtime `/dev/sg*` resolution.
-- Added a guarded 20%/50% commissioning test that records per-fan RPM, restores both shelves to 50%, and writes a ZIP under the `Back-Up` share.
+- Added a guarded 20%/50% commissioning test that records per-fan RPM, restores both shelves to their normal 20% resting speed, and writes a ZIP under the `Back-Up` share.
+- Kept the host controller disabled after the first hardware test showed no meaningful RPM increase between 20% and 50%; serial control remains unverified.
 
 ## v0.7.0 — 2026-08-26
 

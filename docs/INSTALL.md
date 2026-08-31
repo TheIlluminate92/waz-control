@@ -58,13 +58,15 @@ To collect the read-only shelf mapping and fan-RPM data, run:
 
 It prints the timestamped destination under `/mnt/user/Back-Up/MD1200-Fan-Controller/diagnostics`. The diagnostic reads cached disk state and SES element status; it does not write to either serial adapter.
 
-Before enabling the host controller, the standalone commissioning test can compare measured fan RPM at 20% and 50% for each shelf. The script refuses to run while the legacy Docker is running or the WAZ controller is enabled, waits ten seconds at each setting, saves raw SES output under the `Back-Up` share, and finishes with both shelves at 50%:
+Before enabling the host controller, the standalone commissioning test can compare measured fan RPM at 20% and 50% for each shelf. The script refuses to run while the legacy Docker is running or the WAZ controller is enabled, waits ten seconds at each setting, saves raw SES output under the `Back-Up` share, and restores both shelves to their normal 20% resting speed before exiting:
 
 ```bash
 docker stop MD1200-Fan-Controller
 /usr/local/emhttp/plugins/waz.dashboard/scripts/test-md1200-controls.sh
 docker start MD1200-Fan-Controller
 ```
+
+Do not enable the host controller unless both shelf results report `PASS`. A `REVIEW` result means the serial command path has not been proven, even when fan RPM telemetry is healthy.
 
 ## Updating
 

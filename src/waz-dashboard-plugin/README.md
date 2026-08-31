@@ -39,7 +39,7 @@ WAZ Dashboard is a rolling-test Unraid 7.2+ dashboard plugin. It installs matche
 - Storage capacities displayed in decimal KB, MB, GB, and TB units
 - Compact MD1200 fan control in the full-width Health header
 - Independent Top and Bottom average RPM readouts in Auto mode
-- Confirmed 20%, 30%, 40%, and 50% Manual control for both shelves
+- Staged 20%, 30%, 40%, and 50% Manual controls, pending successful hardware commissioning
 - A disabled-by-default host controller that blocks writes while the legacy Docker container is running
 - Migration snapshots in `/mnt/user/Back-Up/MD1200-Fan-Controller`
 

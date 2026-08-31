@@ -184,7 +184,7 @@ foreach ($marker in @(
     'sg_ses -p es'
     '/diagnostics/'
     'control-tests'
-    'Returning both shelves to the 50% commissioning-safe state'
+    'Returning both shelves to their normal 20% resting state'
     'delta>=250 && percent>=10'
 )) {
     if (-not $manifestText.Contains($marker)) {

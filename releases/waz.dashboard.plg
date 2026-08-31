@@ -7747,14 +7747,14 @@ sample_rpm() {
   echo "$AVERAGE"
 }
 
-restore_safe() {
+restore_normal() {
   set +e
-  echo "Returning both shelves to the 50% commissioning-safe state..."
-  send_speed "top" "$TOP_PORT" 50
-  send_speed "bottom" "$BOTTOM_PORT" 50
+  echo "Returning both shelves to their normal 20% resting state..."
+  send_speed "top" "$TOP_PORT" 20
+  send_speed "bottom" "$BOTTOM_PORT" 20
 }
-trap restore_safe EXIT
-trap 'restore_safe; trap - EXIT; exit 130' INT TERM
+trap restore_normal EXIT
+trap 'restore_normal; trap - EXIT; exit 130' INT TERM
 
 echo "Recording baseline RPM..."
 TOP_BASELINE="$(sample_rpm top baseline "$TOP_SES" baseline)"
@@ -7780,7 +7780,7 @@ send_speed bottom "$BOTTOM_PORT" 50
 sleep "$WAIT_SECONDS"
 BOTTOM_50="$(sample_rpm bottom 50-percent "$BOTTOM_SES" 50)"
 
-restore_safe
+restore_normal
 trap - EXIT INT TERM
 
 classify_response() {
@@ -7807,7 +7807,7 @@ BOTTOM_RESULT="$(classify_response "$BOTTOM_20" "$BOTTOM_50")"
   echo "Bottom 50%: $BOTTOM_50 RPM"
   echo "Bottom response: $BOTTOM_RESULT"
   echo
-  echo "Final direct command: 50% on both shelves"
+  echo "Final direct command: 20% on both shelves"
 } | tee "$RESULT_DIR/result.txt"
 
 if command -v zip >/dev/null 2>&1; then
