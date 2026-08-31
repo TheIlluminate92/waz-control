@@ -164,7 +164,8 @@ function waz_md1200_controller_send(string $port, int $speed, bool $dryRun): arr
 
         $handle = @fopen($port, 'w');
         if ($handle === false) return ['state' => 'fault', 'message' => 'Unable to open serial adapter'];
-        $payload = 'set_speed ' . $speed . "\r\n";
+        // BlueDress accepts the command when terminated by carriage return only.
+        $payload = 'set_speed ' . $speed . "\r";
         for ($attempt = 0; $attempt < 5; $attempt++) {
             $written = @fwrite($handle, $payload);
             @fflush($handle);

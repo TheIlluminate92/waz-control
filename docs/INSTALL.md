@@ -68,6 +68,8 @@ docker start MD1200-Fan-Controller
 
 Do not enable the host controller unless both shelf results report `PASS`. A `REVIEW` result means the serial command path has not been proven, even when fan RPM telemetry is healthy.
 
+The commissioned BlueDress 101 EMM consoles require each `set_speed` command to end with a carriage return only. CRLF framing can echo normally at the console while failing to produce the requested RPM change.
+
 ## Updating
 
 Repeat the download, staging, and forced-install commands. Runtime files are replaced in RAM; existing `/boot/config/plugins/waz.dashboard/waz.dashboard.cfg` settings are preserved and new defaults are appended.

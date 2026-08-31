@@ -192,6 +192,18 @@ foreach ($marker in @(
     }
 }
 
+$controllerSource = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'source/usr/local/emhttp/plugins/waz.dashboard/include/md1200-controller.php'))
+$controlTestSource = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'source/usr/local/emhttp/plugins/waz.dashboard/scripts/test-md1200-controls.sh'))
+if (-not $controllerSource.Contains('$payload = ''set_speed '' . $speed . "\r";')) {
+    throw 'MD1200 controller is not using carriage-return-only command framing.'
+}
+if (-not $controlTestSource.Contains("printf 'set_speed %s\r'")) {
+    throw 'MD1200 commissioning test is not using carriage-return-only command framing.'
+}
+if ($controllerSource.Contains('$payload = ''set_speed '' . $speed . "\r\n";') -or $controlTestSource.Contains("printf 'set_speed %s\r\n'")) {
+    throw 'MD1200 CRLF command framing was reintroduced.'
+}
+
 if ($manifestText.Contains('/boot/config/plugins/waz.dashboard/waz.health.cfg')) {
     throw 'Integrated Health is still pointed at the legacy configuration filename.'
 }

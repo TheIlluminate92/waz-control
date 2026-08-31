@@ -68,7 +68,8 @@ send_speed() {
     stty -F "$PORT" 38400 raw -echo -crtscts -hupcl cs8 -cstopb -parenb
     exec 8>"$PORT"
     for _ in 1 2 3 4 5; do
-      printf 'set_speed %s\r\n' "$SPEED" >&8
+      # BlueDress accepts the command when terminated by carriage return only.
+      printf 'set_speed %s\r' "$SPEED" >&8
       sleep 0.1
     done
     exec 8>&-
