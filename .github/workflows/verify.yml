@@ -1,0 +1,19 @@
+name: Verify plugin manifest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify manifest
+        shell: pwsh
+        run: .\src\waz-dashboard-plugin\tests\verify.ps1
