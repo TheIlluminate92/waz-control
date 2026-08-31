@@ -8273,10 +8273,9 @@ if [ -x "$RUNTIME_DIR/scripts/backup-md1200.sh" ]; then
   "$RUNTIME_DIR/scripts/backup-md1200.sh" >/dev/null || true
 fi
 rm -rf "$RUNTIME_DIR"
-rm -rf "/boot/config/plugins/waz.dashboard"
 rm -rf "/var/run/waz.dashboard"
 rm -f "/boot/config/plugins/waz.dashboard.plg"
-echo "WAZ System removed. Reload the Dashboard to clear the panel."
+echo "WAZ System removed. Persistent settings were retained in /boot/config/plugins/waz.dashboard. Reload the Dashboard to clear the panel."
 ]]>
 </INLINE>
 </FILE>

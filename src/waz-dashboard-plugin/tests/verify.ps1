@@ -55,6 +55,9 @@ if ($manifestText.Contains('@@')) {
 if ($manifestText -notmatch 'Method="remove"') {
     throw 'Manifest is missing an uninstall handler.'
 }
+if ($manifestText -match 'rm -rf\s+"/boot/config/plugins/waz\.dashboard"') {
+    throw 'The uninstall handler removes persistent settings, which breaks forced rolling updates.'
+}
 if ($manifestText -notmatch 'pluginURL="file:///boot/config/plugins/waz.dashboard.plg"') {
     throw 'Manifest is missing its rolling-test pluginURL.'
 }
