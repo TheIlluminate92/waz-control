@@ -16,6 +16,7 @@
 - Added a guarded 20%/50% commissioning test that records per-fan RPM, restores both shelves to their normal 20% resting speed, and writes a ZIP under the `Back-Up` share.
 - Corrected BlueDress serial framing to use carriage-return-only command termination after the first test exposed that CRLF commands were not applied reliably.
 - Confirmed both primary active EMM serial paths: 50% produced approximately 6,300–6,400 RPM and restoring 20% produced approximately 3,300–3,550 RPM.
+- Fixed Dashboard Auto/Manual changes to use Unraid's current page session token and rely on Unraid's built-in POST validation.
 
 ## v0.7.0 — 2026-08-26
 

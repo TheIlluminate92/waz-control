@@ -10,13 +10,7 @@ require_once __DIR__ . '/md1200.php';
 
 try {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-        $expected = waz_md1200_expected_csrf();
-        $provided = trim((string) ($_POST['csrf_token'] ?? ''));
-        if ($expected === '' || !hash_equals($expected, $provided)) {
-            http_response_code(403);
-            throw new RuntimeException('The Unraid session token was not accepted');
-        }
-
+        // Unraid's PHP auto-prepend validates csrf_token and removes it from $_POST.
         $mode = strtolower(trim((string) ($_POST['mode'] ?? '')));
         if (!in_array($mode, ['auto', 'manual'], true)) {
             throw new InvalidArgumentException('Mode must be auto or manual');

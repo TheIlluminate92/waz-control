@@ -194,6 +194,8 @@ foreach ($marker in @(
 
 $controllerSource = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'source/usr/local/emhttp/plugins/waz.dashboard/include/md1200-controller.php'))
 $controlTestSource = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'source/usr/local/emhttp/plugins/waz.dashboard/scripts/test-md1200-controls.sh'))
+$controlEndpointSource = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'source/usr/local/emhttp/plugins/waz.dashboard/include/md1200-control.php'))
+$bannerSource = [System.IO.File]::ReadAllText((Join-Path (Split-Path -Parent $projectRoot) 'waz-health-plugin/source/usr/local/emhttp/plugins/waz.health/assets/js/banner.js'))
 if (-not $controllerSource.Contains('$payload = ''set_speed '' . $speed . "\r";')) {
     throw 'MD1200 controller is not using carriage-return-only command framing.'
 }
@@ -202,6 +204,12 @@ if (-not $controlTestSource.Contains("printf 'set_speed %s\r'")) {
 }
 if ($controllerSource.Contains('$payload = ''set_speed '' . $speed . "\r\n";') -or $controlTestSource.Contains("printf 'set_speed %s\r\n'")) {
     throw 'MD1200 CRLF command framing was reintroduced.'
+}
+if (-not $bannerSource.Contains('window.csrf_token || config.csrfToken')) {
+    throw 'MD1200 header control is not using Unraid''s current page session token.'
+}
+if ($controlEndpointSource.Contains('waz_md1200_expected_csrf') -or $controlEndpointSource.Contains("`$_POST['csrf_token']")) {
+    throw 'MD1200 endpoint is redundantly validating the token that Unraid removes after validation.'
 }
 
 if ($manifestText.Contains('/boot/config/plugins/waz.dashboard/waz.health.cfg')) {

@@ -2072,7 +2072,8 @@ mkdir -p "$RUNTIME_DIR" "$CONFIG_DIR"
   var config = window.WAZHealthBootstrap || {};
   var endpoint = config.endpoint || "/plugins/waz.dashboard/include/status.php";
   var fanEndpoint = config.fanEndpoint || "/plugins/waz.dashboard/include/md1200-control.php";
-  var csrfToken = String(config.csrfToken || "");
+  // Unraid publishes the current session token as a page-global variable.
+  var csrfToken = String(window.csrf_token || config.csrfToken || "");
   var refreshMs = Math.max(3000, Number(config.refreshMs) || 5000);
   var allowedStates = ["normal", "attention", "fault", "unknown"];
   var subsystemOrder = ["array", "storage", "cooling", "ups"];
@@ -4968,13 +4969,7 @@ require_once __DIR__ . '/md1200.php';
 
 try {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
-        $expected = waz_md1200_expected_csrf();
-        $provided = trim((string) ($_POST['csrf_token'] ?? ''));
-        if ($expected === '' || !hash_equals($expected, $provided)) {
-            http_response_code(403);
-            throw new RuntimeException('The Unraid session token was not accepted');
-        }
-
+        // Unraid's PHP auto-prepend validates csrf_token and removes it from $_POST.
         $mode = strtolower(trim((string) ($_POST['mode'] ?? '')));
         if (!in_array($mode, ['auto', 'manual'], true)) {
             throw new InvalidArgumentException('Mode must be auto or manual');
@@ -5448,14 +5443,6 @@ function waz_md1200_public_status(): array
         'generatedAt' => $generatedAt,
         'shelves' => $shelves,
     ];
-}
-
-function waz_md1200_expected_csrf(): string
-{
-    $values = is_file('/var/local/emhttp/var.ini')
-        ? @parse_ini_file('/var/local/emhttp/var.ini', false, INI_SCANNER_RAW)
-        : [];
-    return is_array($values) ? trim((string) ($values['csrf_token'] ?? '')) : '';
 }
 
 function waz_md1200_quote_ini(string $value): string
@@ -7931,17 +7918,12 @@ $jsFile = $pluginRoot . '/assets/js/banner.js';
 
 $cssVersion = is_file($cssFile) ? filemtime($cssFile) : 0;
 $jsVersion = is_file($jsFile) ? filemtime($jsFile) : 0;
-$varValues = is_file('/var/local/emhttp/var.ini')
-    ? @parse_ini_file('/var/local/emhttp/var.ini', false, INI_SCANNER_RAW)
-    : [];
-$csrfToken = is_array($varValues) ? (string) ($varValues['csrf_token'] ?? '') : '';
 ?>
 <link rel="stylesheet" href="<?=$webRoot?>/assets/css/banner.css?v=<?=$cssVersion?>">
 <script>
 window.WAZHealthBootstrap = <?=json_encode([
     'endpoint' => $webRoot . '/include/status.php',
     'fanEndpoint' => $webRoot . '/include/md1200-control.php',
-    'csrfToken' => $csrfToken,
     'refreshMs' => 5000,
 ], JSON_UNESCAPED_SLASHES)?>;
 </script>

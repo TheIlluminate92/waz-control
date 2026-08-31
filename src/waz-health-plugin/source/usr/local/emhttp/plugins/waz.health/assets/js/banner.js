@@ -6,7 +6,8 @@
   var config = window.WAZHealthBootstrap || {};
   var endpoint = config.endpoint || "/plugins/waz.health/include/status.php";
   var fanEndpoint = config.fanEndpoint || "/plugins/waz.health/include/md1200-control.php";
-  var csrfToken = String(config.csrfToken || "");
+  // Unraid publishes the current session token as a page-global variable.
+  var csrfToken = String(window.csrf_token || config.csrfToken || "");
   var refreshMs = Math.max(3000, Number(config.refreshMs) || 5000);
   var allowedStates = ["normal", "attention", "fault", "unknown"];
   var subsystemOrder = ["array", "storage", "cooling", "ups"];

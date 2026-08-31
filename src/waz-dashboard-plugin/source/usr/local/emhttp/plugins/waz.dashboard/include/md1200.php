@@ -106,14 +106,6 @@ function waz_md1200_public_status(): array
     ];
 }
 
-function waz_md1200_expected_csrf(): string
-{
-    $values = is_file('/var/local/emhttp/var.ini')
-        ? @parse_ini_file('/var/local/emhttp/var.ini', false, INI_SCANNER_RAW)
-        : [];
-    return is_array($values) ? trim((string) ($values['csrf_token'] ?? '')) : '';
-}
-
 function waz_md1200_quote_ini(string $value): string
 {
     return '"' . str_replace(['\\', '"', "\r", "\n"], ['\\\\', '\\"', '', ''], $value) . '"';
