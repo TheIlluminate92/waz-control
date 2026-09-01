@@ -5,6 +5,7 @@ WAZ Dashboard is a rolling-test Unraid 7.2+ dashboard plugin. It installs matche
 ## Version 0.7.0 scope
 
 - Sticky full-width WAZ Health banner across the WebUI, now installed and maintained by this single dashboard plugin
+- Blue dashboard wrench in the WAZ Health header opens Unraid's native Tile Management window and uses Unraid's saved module preferences
 - Banner colors matched to the dashboard's dark background, border, text, cyan, green, amber, and red palette
 - Automatic migration of existing standalone WAZ Health thresholds and overrides into `waz.dashboard.cfg`
 - Recoverable standalone-plugin retirement by renaming `waz.health.plg` to `waz.health.plg.disabled` and removing only its RAM-backed runtime

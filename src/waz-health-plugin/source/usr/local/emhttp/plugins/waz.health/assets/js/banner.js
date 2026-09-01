@@ -64,6 +64,16 @@
     return item;
   }
 
+  function openDashboardModules() {
+    if (typeof window.contentMgmt === "function") window.contentMgmt();
+  }
+
+  function updateDashboardModulesControl() {
+    if (!banner) return;
+    var control = banner.querySelector(".waz-health__modules");
+    if (control) control.hidden = typeof window.contentMgmt !== "function";
+  }
+
   function createBanner() {
     var root = document.createElement("section");
     root.id = "waz-health-banner";
@@ -97,7 +107,21 @@
 
     var meta = document.createElement("span");
     meta.className = "waz-health__meta";
-    meta.innerHTML = '<time class="waz-health__time" data-field="time"></time><span class="waz-health__uptime"><span aria-hidden="true">↑</span><span data-field="uptime">—</span></span>';
+
+    var modules = document.createElement("button");
+    modules.type = "button";
+    modules.className = "waz-health__modules";
+    modules.hidden = true;
+    modules.title = "Manage dashboard modules";
+    modules.setAttribute("aria-label", "Manage dashboard modules");
+    var modulesIcon = document.createElement("i");
+    modulesIcon.className = "fa fa-fw fa-wrench";
+    modulesIcon.setAttribute("aria-hidden", "true");
+    modules.appendChild(modulesIcon);
+    modules.addEventListener("click", openDashboardModules);
+
+    meta.appendChild(modules);
+    meta.insertAdjacentHTML("beforeend", '<time class="waz-health__time" data-field="time"></time><span class="waz-health__uptime"><span aria-hidden="true">↑</span><span data-field="uptime">—</span></span>');
 
     inner.appendChild(identity);
     inner.appendChild(overall);
@@ -208,6 +232,7 @@
 
     renderIssues();
     updateClockAndUptime();
+    updateDashboardModulesControl();
   }
 
   function mergeSnapshot(next) {

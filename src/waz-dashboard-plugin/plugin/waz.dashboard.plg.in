@@ -10,6 +10,7 @@
 ### &version; - WAZ System v@@APP_VERSION@@
 
 - Integrates the sticky WAZ Health banner, live collectors, thresholds, local time, and uptime into the dashboard plugin.
+- Adds a blue wrench to the WAZ Health header that opens Unraid's native Tile Management window.
 - Matches the banner to the System, Workloads, and Storage dark palette.
 - Migrates standalone WAZ Health settings and recoverably disables its old plugin manifest to prevent duplicate loaders.
 - Imports live Docker groups from FolderView Plus and Unraid's native Docker Organizer, with existing FolderView formats retained as fallbacks.

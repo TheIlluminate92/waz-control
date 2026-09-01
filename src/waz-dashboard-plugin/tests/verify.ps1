@@ -153,6 +153,9 @@ foreach ($marker in @(
     '--waz-health-background: #111417',
     '--waz-health-border: #303840',
     '--waz-health-cyan: #22b8f0',
+    'waz-health__modules',
+    'typeof window.contentMgmt === "function"',
+    'Manage dashboard modules',
     'LEGACY_HEALTH_CONFIG',
     '${LEGACY_HEALTH_PLUGIN}.disabled'
 )) {

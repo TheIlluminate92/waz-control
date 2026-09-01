@@ -56,9 +56,9 @@ No downloadable files are presented for these milestones because the exact packa
 
 File: [`releases/waz.dashboard.plg`](../releases/waz.dashboard.plg)
 
-This is the current release. It combines the Health banner, Server Status, Workloads, and Storage under one rolling plugin and migrates the old standalone Health configuration.
+This is the current rolling release. It combines the Health banner, Server Status, Workloads, and Storage under one plugin, migrates the old standalone Health configuration, and exposes Unraid's native Tile Management window from a blue wrench in the WAZ header.
 
-SHA-256: `5c3510028f6cc86e0ad30f343521afbbdbd3918953c4842765274e365abeac7f`
+SHA-256: `3aa7b582745e837f0abb901eefefbce74fadc4c647cf86c57923e3a9e5f18cbf`
 
 ## Future versions
 

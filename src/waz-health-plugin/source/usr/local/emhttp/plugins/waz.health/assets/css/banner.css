@@ -170,6 +170,39 @@
   letter-spacing: 0.04em;
 }
 
+#waz-health-banner .waz-health__modules {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--waz-health-cyan);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#waz-health-banner .waz-health__modules[hidden] {
+  display: none;
+}
+
+#waz-health-banner .waz-health__modules:hover,
+#waz-health-banner .waz-health__modules:focus-visible {
+  border-color: var(--waz-health-border);
+  outline: none;
+  background: var(--waz-health-raised);
+}
+
+#waz-health-banner .waz-health__modules:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--waz-health-cyan) 28%, transparent);
+}
+
 #waz-health-banner .waz-health__uptime {
   gap: 4px;
 }

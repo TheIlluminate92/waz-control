@@ -6,4 +6,14 @@ It contains the integrated Health banner plus the Server Status, Workloads, and 
 
 See [installation](../docs/INSTALL.md), [dependencies](../docs/DEPENDENCIES.md), and [recovery](../docs/RECOVERY.md) before using it.
 
+For a clean terminal replacement that preserves the existing WAZ configuration, run:
+
+```bash
+wget -qO /tmp/install-waz-dashboard.sh \
+  https://raw.githubusercontent.com/TheIlluminate92/waz-control/main/releases/install-waz-dashboard.sh
+bash /tmp/install-waz-dashboard.sh
+```
+
+The installer downloads and verifies the new package before removing the installed plugin. It backs up `waz.dashboard.cfg` outside the directory removed by Unraid, restores it before installation, and retains the backup if installation fails.
+
 The `history/` directory preserves the standalone Health builds that still exist from development. They are provided to show the progression of the project and should not be installed alongside v0.7.0.
