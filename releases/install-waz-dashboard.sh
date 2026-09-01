@@ -3,7 +3,7 @@ set -eu
 
 PLUGIN_NAME="waz.dashboard.plg"
 PLUGIN_URL="https://raw.githubusercontent.com/TheIlluminate92/waz-control/main/releases/waz.dashboard.plg"
-EXPECTED_SHA256="3aa7b582745e837f0abb901eefefbce74fadc4c647cf86c57923e3a9e5f18cbf"
+EXPECTED_SHA256="d208aa20e6b015240e63884b5d2f16c58eb7f3818a03302ed2bf3c868d5ba252"
 SOURCE="${1:-$PLUGIN_URL}"
 PACKAGE="/tmp/waz.dashboard-install.$$.plg"
 CONFIG_DIR="/boot/config/plugins/waz.dashboard"

@@ -2,17 +2,28 @@
 
 RUNTIME_DIR="/usr/local/emhttp/plugins/waz.dashboard"
 STATE_DIR="/var/run/waz.dashboard"
-PID_FILE="$STATE_DIR/gpu-sampler.pid"
+GPU_PID_FILE="$STATE_DIR/gpu-sampler.pid"
+FAN_PID_FILE="$STATE_DIR/md1200-controller.pid"
 
 mkdir -p "$STATE_DIR"
 
-if [ -s "$PID_FILE" ]; then
-  OLD_PID="$(cat "$PID_FILE" 2>/dev/null)"
-  if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
-    exit 0
-  fi
-  rm -f "$PID_FILE"
+pid_matches() {
+  local PID_FILE="$1"
+  local PATTERN="$2"
+  [ -s "$PID_FILE" ] || return 1
+  local PID
+  PID="$(cat "$PID_FILE" 2>/dev/null)"
+  [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null && [ -r "/proc/$PID/cmdline" ] && tr '\0' ' ' < "/proc/$PID/cmdline" | grep -q "$PATTERN"
+}
+
+if ! pid_matches "$GPU_PID_FILE" '/waz.dashboard/include/gpu-sampler.php'; then
+  rm -f "$GPU_PID_FILE"
+  nohup /usr/bin/php "$RUNTIME_DIR/include/gpu-sampler.php" >/dev/null 2>&1 &
+  echo "$!" > "$GPU_PID_FILE"
 fi
 
-nohup /usr/bin/php "$RUNTIME_DIR/include/gpu-sampler.php" >/dev/null 2>&1 &
-echo "$!" > "$PID_FILE"
+if ! pid_matches "$FAN_PID_FILE" '/waz.dashboard/include/md1200-controller.php'; then
+  rm -f "$FAN_PID_FILE"
+  nohup /usr/bin/php "$RUNTIME_DIR/include/md1200-controller.php" >/dev/null 2>&1 &
+  echo "$!" > "$FAN_PID_FILE"
+fi

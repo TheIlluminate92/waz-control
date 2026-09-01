@@ -61,6 +61,10 @@
 - Adds best-effort Intel GPU and video process attribution.
 - Replaces 100 ms server polling with one combined snapshot per second.
 - Keeps persistent settings during forced rolling updates.
+- Replaces the MD1200 Docker controller with a host-native, disabled-by-default control loop and compact header control.
+- Shows independent Top and Bottom average fan RPM in Auto mode and offers 20/30/40/50 percent Manual control.
+- Blocks serial writes while the old Docker controller is running and distinguishes command writes from SES fan telemetry.
+- Backs up the Docker configuration, template, logs, and WAZ controller state to the Back-Up share before migration.
 </CHANGES>
 
 <!-- Stop the prior watcher before replacing the RAM-backed runtime tree. -->
@@ -97,8 +101,8 @@ LEGACY_HEALTH_PLUGIN="/boot/config/plugins/waz.health.plg"
 chmod 0644 "$RUNTIME_DIR/WazDashboard.page" "$RUNTIME_DIR/WazWorkloads.page" "$RUNTIME_DIR/WazStorage.page" "$RUNTIME_DIR/WazHealthBanner.page"
 chmod 0644 "$RUNTIME_DIR/assets/css/system.css" "$RUNTIME_DIR/assets/css/workloads.css" "$RUNTIME_DIR/assets/css/storage.css" "$RUNTIME_DIR/assets/css/banner.css"
 chmod 0644 "$RUNTIME_DIR/assets/js/system.js" "$RUNTIME_DIR/assets/js/workloads.js" "$RUNTIME_DIR/assets/js/storage.js" "$RUNTIME_DIR/assets/js/banner.js"
-chmod 0644 "$RUNTIME_DIR/include/metrics.php" "$RUNTIME_DIR/include/workloads.php" "$RUNTIME_DIR/include/storage.php" "$RUNTIME_DIR/include/gpu-sampler.php" "$RUNTIME_DIR/include/health.php" "$RUNTIME_DIR/include/status.php"
-chmod 0755 "$RUNTIME_DIR/scripts/start.sh" "$RUNTIME_DIR/scripts/stop.sh"
+chmod 0644 "$RUNTIME_DIR/include/metrics.php" "$RUNTIME_DIR/include/workloads.php" "$RUNTIME_DIR/include/storage.php" "$RUNTIME_DIR/include/gpu-sampler.php" "$RUNTIME_DIR/include/health.php" "$RUNTIME_DIR/include/status.php" "$RUNTIME_DIR/include/md1200.php" "$RUNTIME_DIR/include/md1200-control.php" "$RUNTIME_DIR/include/md1200-controller.php"
+chmod 0755 "$RUNTIME_DIR/scripts/start.sh" "$RUNTIME_DIR/scripts/stop.sh" "$RUNTIME_DIR/scripts/backup-md1200.sh" "$RUNTIME_DIR/scripts/diagnose-md1200.sh" "$RUNTIME_DIR/scripts/test-md1200-controls.sh"
 
 php -l "$RUNTIME_DIR/include/metrics.php" >/dev/null
 php -l "$RUNTIME_DIR/include/workloads.php" >/dev/null
@@ -106,6 +110,9 @@ php -l "$RUNTIME_DIR/include/storage.php" >/dev/null
 php -l "$RUNTIME_DIR/include/gpu-sampler.php" >/dev/null
 php -l "$RUNTIME_DIR/include/health.php" >/dev/null
 php -l "$RUNTIME_DIR/include/status.php" >/dev/null
+php -l "$RUNTIME_DIR/include/md1200.php" >/dev/null
+php -l "$RUNTIME_DIR/include/md1200-control.php" >/dev/null
+php -l "$RUNTIME_DIR/include/md1200-controller.php" >/dev/null
 
 if [ ! -f "$CONFIG_FILE" ]; then
   cat > "$CONFIG_FILE" <<'WAZ_CONFIG'
@@ -134,6 +141,31 @@ FLOW_FAULT_LPH="120"
 THROTTLE_LATCH_SECONDS="300"
 UPS_LOAD_WARN_PERCENT="90"
 UPS_LOAD_FAULT_PERCENT="100"
+MD1200_ENABLED="no"
+MD1200_MODE="auto"
+MD1200_MANUAL_SPEED="20"
+MD1200_POLL_SECONDS="30"
+MD1200_REASSERT_SECONDS="900"
+MD1200_SENSOR_FAILURE_SPEED="50"
+MD1200_HYSTERESIS_C="1"
+MD1200_THRESHOLD_WARM_C="35"
+MD1200_THRESHOLD_HOT_C="45"
+MD1200_THRESHOLD_VERY_HOT_C="50"
+MD1200_SPEED_COOL="20"
+MD1200_SPEED_WARM="25"
+MD1200_SPEED_HOT="30"
+MD1200_SPEED_VERY_HOT="50"
+MD1200_TOP_NAME="MD1200 Top"
+MD1200_TOP_PORT="/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE33O9T-if00-port0"
+MD1200_TOP_SES_DEVICE="/dev/sg18"
+MD1200_TOP_SES_ADDRESS="0:0:18:0"
+MD1200_TOP_DISKS="disk1,disk2,disk3,disk4,parity,parity2"
+MD1200_BOTTOM_NAME="MD1200 Bottom"
+MD1200_BOTTOM_PORT="/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE32AB2-if00-port0"
+MD1200_BOTTOM_SES_DEVICE="/dev/sg11"
+MD1200_BOTTOM_SES_ADDRESS="0:0:11:0"
+MD1200_BOTTOM_DISKS="disk5,disk6,disk7,disk8,disk9,disk10,disk11,disk12,disk13,disk14,disk15"
+MD1200_BACKUP_DIR="/mnt/user/Back-Up/MD1200-Fan-Controller"
 WAZ_CONFIG
 fi
 
@@ -162,7 +194,32 @@ for DEFAULT in \
   'FLOW_FAULT_LPH="120"' \
   'THROTTLE_LATCH_SECONDS="300"' \
   'UPS_LOAD_WARN_PERCENT="90"' \
-  'UPS_LOAD_FAULT_PERCENT="100"'; do
+  'UPS_LOAD_FAULT_PERCENT="100"' \
+  'MD1200_ENABLED="no"' \
+  'MD1200_MODE="auto"' \
+  'MD1200_MANUAL_SPEED="20"' \
+  'MD1200_POLL_SECONDS="30"' \
+  'MD1200_REASSERT_SECONDS="900"' \
+  'MD1200_SENSOR_FAILURE_SPEED="50"' \
+  'MD1200_HYSTERESIS_C="1"' \
+  'MD1200_THRESHOLD_WARM_C="35"' \
+  'MD1200_THRESHOLD_HOT_C="45"' \
+  'MD1200_THRESHOLD_VERY_HOT_C="50"' \
+  'MD1200_SPEED_COOL="20"' \
+  'MD1200_SPEED_WARM="25"' \
+  'MD1200_SPEED_HOT="30"' \
+  'MD1200_SPEED_VERY_HOT="50"' \
+  'MD1200_TOP_NAME="MD1200 Top"' \
+  'MD1200_TOP_PORT="/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE33O9T-if00-port0"' \
+  'MD1200_TOP_SES_DEVICE="/dev/sg18"' \
+  'MD1200_TOP_SES_ADDRESS="0:0:18:0"' \
+  'MD1200_TOP_DISKS="disk1,disk2,disk3,disk4,parity,parity2"' \
+  'MD1200_BOTTOM_NAME="MD1200 Bottom"' \
+  'MD1200_BOTTOM_PORT="/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FTE32AB2-if00-port0"' \
+  'MD1200_BOTTOM_SES_DEVICE="/dev/sg11"' \
+  'MD1200_BOTTOM_SES_ADDRESS="0:0:11:0"' \
+  'MD1200_BOTTOM_DISKS="disk5,disk6,disk7,disk8,disk9,disk10,disk11,disk12,disk13,disk14,disk15"' \
+  'MD1200_BACKUP_DIR="/mnt/user/Back-Up/MD1200-Fan-Controller"'; do
   KEY="${DEFAULT%%=*}"
   if ! grep -q "^${KEY}=" "$CONFIG_FILE"; then
     LEGACY_VALUE=""
@@ -182,6 +239,12 @@ if [ -f "$LEGACY_HEALTH_PLUGIN" ]; then
 fi
 rm -rf "/usr/local/emhttp/plugins/waz.health"
 
+if [ ! -f "$CONFIG_DIR/md1200-migration-backed-up" ] && [ -d "/mnt/user/Back-Up" ]; then
+  if "$RUNTIME_DIR/scripts/backup-md1200.sh" >/dev/null; then
+    touch "$CONFIG_DIR/md1200-migration-backed-up"
+  fi
+fi
+
 "$RUNTIME_DIR/scripts/start.sh"
 
 echo "WAZ Dashboard v@@APP_VERSION@@ installed with integrated Health banner. Reload the Unraid WebUI to display it."
@@ -197,11 +260,13 @@ RUNTIME_DIR="/usr/local/emhttp/plugins/waz.dashboard"
 if [ -x "$RUNTIME_DIR/scripts/stop.sh" ]; then
   "$RUNTIME_DIR/scripts/stop.sh" || true
 fi
+if [ -x "$RUNTIME_DIR/scripts/backup-md1200.sh" ]; then
+  "$RUNTIME_DIR/scripts/backup-md1200.sh" >/dev/null || true
+fi
 rm -rf "$RUNTIME_DIR"
-rm -rf "/boot/config/plugins/waz.dashboard"
 rm -rf "/var/run/waz.dashboard"
 rm -f "/boot/config/plugins/waz.dashboard.plg"
-echo "WAZ System removed. Reload the Dashboard to clear the panel."
+echo "WAZ System removed. Persistent settings were retained in /boot/config/plugins/waz.dashboard. Reload the Dashboard to clear the panel."
 ]]>
 </INLINE>
 </FILE>

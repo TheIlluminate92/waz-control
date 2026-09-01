@@ -54,12 +54,12 @@ No downloadable files are presented for these milestones because the exact packa
 
 ## WAZ Control v0.7.0 — build 2026.08.26.16
 
+This was the first unified release. It combined the Health banner, Server Status, Workloads, and Storage under one plugin and migrated the old standalone Health configuration. It was replaced in the rolling release location by v0.8.0 and is not retained as a separate downloadable artifact.
+
+## WAZ Control v0.8.0 — build 2026.09.01.01
+
 File: [`releases/waz.dashboard.plg`](../releases/waz.dashboard.plg)
 
-This is the current rolling release. It combines the Health banner, Server Status, Workloads, and Storage under one plugin, migrates the old standalone Health configuration, and exposes Unraid's native Tile Management window from a blue wrench in the WAZ header.
+This is the current rolling release. It adds the host-native MD1200 fan controller and compact header control while retaining the unified dashboard panels and adding Unraid's native Tile Management window through the blue wrench.
 
-SHA-256: `3aa7b582745e837f0abb901eefefbce74fadc4c647cf86c57923e3a9e5f18cbf`
-
-## Future versions
-
-There is no v0.8.0 release in this repository yet. Future public-facing work will be reviewed and sanitized before being labeled as a new release.
+SHA-256: `d208aa20e6b015240e63884b5d2f16c58eb7f3818a03302ed2bf3c868d5ba252`

@@ -5,6 +5,9 @@
 
   var config = window.WAZHealthBootstrap || {};
   var endpoint = config.endpoint || "/plugins/waz.health/include/status.php";
+  var fanEndpoint = config.fanEndpoint || "/plugins/waz.health/include/md1200-control.php";
+  // Unraid publishes the current session token as a page-global variable.
+  var csrfToken = String(window.csrf_token || config.csrfToken || "");
   var refreshMs = Math.max(3000, Number(config.refreshMs) || 5000);
   var allowedStates = ["normal", "attention", "fault", "unknown"];
   var subsystemOrder = ["array", "storage", "cooling", "ups"];
@@ -12,12 +15,14 @@
     server: { label: "WAZ-SERVER", uptimeSeconds: null },
     overall: { label: "SYSTEM NORMAL", state: "normal", message: "" },
     subsystems: {},
+    fans: { enabled: false, mode: "auto", manualSpeed: 20, healthState: "normal", shelves: [] },
     uptimeSampledAt: Date.now()
   };
   var banner = null;
   var refreshTimer = null;
   var clockTimer = null;
   var resizeObserver = null;
+  var fanBusy = false;
 
   function normalizeState(value) {
     value = String(value || "unknown").toLowerCase();
@@ -74,6 +79,74 @@
     if (control) control.hidden = typeof window.contentMgmt !== "function";
   }
 
+  function setFanMode(value) {
+    if (fanBusy || !state.fans.enabled) return;
+    var manual = value !== "auto";
+    var speed = manual ? Number(value) : Number(state.fans.manualSpeed || 20);
+    var prompt = manual
+      ? "Set both MD1200 shelves to " + speed + "% manual fan speed?"
+      : "Return both MD1200 shelves to automatic temperature control?";
+    if (!window.confirm(prompt)) {
+      renderFans();
+      return;
+    }
+
+    fanBusy = true;
+    renderFans();
+    var body = new URLSearchParams();
+    body.set("csrf_token", csrfToken);
+    body.set("mode", manual ? "manual" : "auto");
+    if (manual) body.set("speed", String(speed));
+    fetch(fanEndpoint, {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body: body.toString()
+    })
+      .then(function (response) {
+        return response.json().then(function (payload) {
+          if (!response.ok) throw new Error(payload.error || "Fan control update failed");
+          state.fans = Object.assign({}, state.fans, payload);
+        });
+      })
+      .catch(function (error) {
+        window.alert(error.message || "Fan control update failed");
+      })
+      .finally(function () {
+        fanBusy = false;
+        renderFans();
+        window.setTimeout(refresh, 1200);
+      });
+  }
+
+  function createFanControl() {
+    var control = document.createElement("span");
+    control.className = "waz-health__fans";
+    control.dataset.field = "fans";
+    control.innerHTML = '<span class="waz-health__fans-label"><span class="waz-health__dot" aria-hidden="true"></span>MD1200</span>' +
+      '<span class="waz-health__fan-readings"><span data-fan-shelf="top">TOP —</span><span data-fan-shelf="bottom">BOTTOM —</span></span>';
+
+    var select = document.createElement("select");
+    select.className = "waz-health__fan-select";
+    select.setAttribute("aria-label", "MD1200 fan control mode and manual speed");
+    [
+      ["auto", "AUTO"],
+      ["20", "MANUAL 20%"],
+      ["30", "MANUAL 30%"],
+      ["40", "MANUAL 40%"],
+      ["50", "MANUAL 50%"]
+    ].forEach(function (entry) {
+      var option = document.createElement("option");
+      option.value = entry[0];
+      option.textContent = entry[1];
+      select.appendChild(option);
+    });
+    select.addEventListener("change", function () { setFanMode(select.value); });
+    control.appendChild(select);
+    return control;
+  }
+
   function createBanner() {
     var root = document.createElement("section");
     root.id = "waz-health-banner";
@@ -105,6 +178,10 @@
 
     var dividerTwo = dividerOne.cloneNode(true);
 
+    var fanControl = createFanControl();
+
+    var dividerThree = dividerOne.cloneNode(true);
+
     var meta = document.createElement("span");
     meta.className = "waz-health__meta";
 
@@ -128,6 +205,8 @@
     inner.appendChild(dividerOne);
     inner.appendChild(subsystems);
     inner.appendChild(dividerTwo);
+    inner.appendChild(fanControl);
+    inner.appendChild(dividerThree);
     inner.appendChild(meta);
     root.appendChild(inner);
 
@@ -230,9 +309,48 @@
       item.setAttribute("aria-label", (value.label || key) + ": " + normalizeState(value.state));
     });
 
+    renderFans();
+
     renderIssues();
     updateClockAndUptime();
     updateDashboardModulesControl();
+  }
+
+  function renderFans() {
+    if (!banner) return;
+    var control = banner.querySelector('[data-field="fans"]');
+    if (!control) return;
+    var fans = state.fans || {};
+    var enabled = fans.enabled === true;
+    var mode = fans.mode === "manual" ? "manual" : "auto";
+    var select = control.querySelector("select");
+    var readings = control.querySelector(".waz-health__fan-readings");
+    control.dataset.state = enabled ? normalizeState(fans.healthState || "unknown") : "unknown";
+    control.classList.toggle("waz-health__fans--disabled", !enabled);
+    control.classList.toggle("waz-health__fans--manual", mode === "manual");
+    if (select) {
+      select.value = mode === "manual" ? String(fans.manualSpeed || 20) : "auto";
+      select.disabled = !enabled || fanBusy;
+      select.title = enabled ? "Controls both MD1200 shelves" : "Controller is staged but not enabled";
+    }
+    if (readings) readings.hidden = mode !== "auto";
+
+    ["top", "bottom"].forEach(function (id) {
+      var node = control.querySelector('[data-fan-shelf="' + id + '"]');
+      if (!node) return;
+      var shelf = (fans.shelves || []).find(function (item) { return item.id === id; }) || {};
+      var rpm = Number(shelf.averageRpm);
+      node.textContent = id.toUpperCase() + " " + (Number.isFinite(rpm) && rpm > 0 ? Math.round(rpm) + " RPM" : "—");
+      node.title = [
+        shelf.name || ("MD1200 " + id),
+        shelf.temperatureC == null ? "temperature unavailable" : shelf.temperatureC + "°C from " + (shelf.temperatureSource || "assigned disks"),
+        shelf.targetPercent == null ? "target unavailable" : shelf.targetPercent + "% target",
+        shelf.telemetryMessage || "fan telemetry current"
+      ].join(" · ");
+    });
+    control.setAttribute("aria-label", enabled
+      ? "MD1200 fan control: " + mode + (mode === "manual" ? " at " + fans.manualSpeed + " percent" : "")
+      : "MD1200 fan control is staged but disabled");
   }
 
   function mergeSnapshot(next) {
@@ -246,6 +364,9 @@
     }
     if (next.subsystems && typeof next.subsystems === "object") {
       state.subsystems = Object.assign({}, state.subsystems, next.subsystems);
+    }
+    if (next.fans && typeof next.fans === "object") {
+      state.fans = Object.assign({}, state.fans, next.fans);
     }
     render();
   }
