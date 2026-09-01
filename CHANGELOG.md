@@ -22,6 +22,9 @@
 - Confirmed both primary active EMM serial paths: 50% produced approximately 6,300–6,400 RPM and restoring 20% produced approximately 3,300–3,550 RPM.
 - Fixed Dashboard Auto/Manual changes to use Unraid's current page session token and rely on Unraid's built-in POST validation.
 - Preserved Dashboard settings during forced plugin updates so controller enablement and policy survive reinstalling the staged package.
+- Replaced the WAZ-owned MD1200 controller with a small client for the dedicated MD12xx Fan Control v0.4.3 API.
+- Removed WAZ serial, temperature-curve, SES, commissioning, migration-backup, and controller-process logic.
+- Made header shelf labels and Manual speed options follow the dedicated plugin's API instead of hard-coded Top/Bottom and 20–50% assumptions.
 
 ## v0.7.0 — 2026-08-26
 

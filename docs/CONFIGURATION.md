@@ -47,32 +47,8 @@ UPS_LOAD_FAULT_PERCENT="100"
 
 The coolant collector currently expects a `highflownext` hwmon device with `Coolant temp` and `Flow [dL/h]` labels. Adapt the collector for other hardware.
 
-## MD1200 fan control
+## MD12xx fan control integration
 
-The host-native controller is deliberately disabled on first install. It preserves the Docker controller's disk-to-shelf assignments and stable FTDI serial paths.
+WAZ no longer owns fan-controller settings or hardware logic. When **MD12xx Fan Control v0.4.3 or newer** is installed, the Health header reads its authenticated local API for controller health, mode, supported manual speeds, shelf names, temperatures, targets, and RPM telemetry. Auto/Manual changes from the WAZ header are submitted to that same plugin API.
 
-```ini
-MD1200_ENABLED="no"
-MD1200_MODE="auto"
-MD1200_MANUAL_SPEED="20"
-MD1200_POLL_SECONDS="30"
-MD1200_REASSERT_SECONDS="900"
-MD1200_SENSOR_FAILURE_SPEED="50"
-MD1200_HYSTERESIS_C="1"
-MD1200_THRESHOLD_WARM_C="35"
-MD1200_THRESHOLD_HOT_C="45"
-MD1200_THRESHOLD_VERY_HOT_C="50"
-MD1200_SPEED_COOL="20"
-MD1200_SPEED_WARM="25"
-MD1200_SPEED_HOT="30"
-MD1200_SPEED_VERY_HOT="50"
-MD1200_TOP_SES_DEVICE="/dev/sg18"
-MD1200_TOP_SES_ADDRESS="0:0:18:0"
-MD1200_BOTTOM_SES_DEVICE="/dev/sg11"
-MD1200_BOTTOM_SES_ADDRESS="0:0:11:0"
-MD1200_BACKUP_DIR="/mnt/user/Back-Up/MD1200-Fan-Controller"
-```
-
-Auto mode chooses a target independently for each shelf from the hottest valid temperature among that shelf's assigned disks. If all assigned disks are spun down it uses the cool speed. If active disks have no valid temperature, it uses the sensor-failure speed. One-degree hysteresis prevents rapid changes around a threshold.
-
-Average RPM requires a working `sg_ses` command. Diagnostics identified the 24 TB Top shelf at SCSI address `0:0:18:0` (`/dev/sg18` during commissioning) and the 14 TB Bottom shelf at `0:0:11:0` (`/dev/sg11`). The controller resolves those addresses back to the current `/dev/sg*` names each time it polls, so ordinary device renumbering does not break telemetry. Each BlueDress command uses a read/write serial session and drains the console reply. A console acknowledgement is reported separately from RPM telemetry and is not treated as proof that a shelf obeyed the command; independent SES RPM remains the proof.
+Configure discovery, shelf mapping, commissioning, temperature curves, fail-safe behavior, and controller enablement in **Settings → Utilities → MD12xx Fan Control**. If the plugin is absent, WAZ hides the fan control without affecting the rest of the dashboard. Legacy `MD1200_*` values left in `waz.dashboard.cfg` by older WAZ builds are inert and may be removed manually.

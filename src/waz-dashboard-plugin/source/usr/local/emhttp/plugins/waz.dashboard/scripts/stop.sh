@@ -20,5 +20,4 @@ stop_process() {
 }
 
 stop_process "$STATE_DIR/gpu-sampler.pid" '/waz.dashboard/include/gpu-sampler.php'
-stop_process "$STATE_DIR/md1200-controller.pid" '/waz.dashboard/include/md1200-controller.php'
-rm -f "$STATE_DIR/gpu.json" "$STATE_DIR/md1200.json" "$STATE_DIR"/md1200-*.lock
+rm -f "$STATE_DIR/gpu.json"

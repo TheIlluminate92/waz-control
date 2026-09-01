@@ -3,7 +3,6 @@
 RUNTIME_DIR="/usr/local/emhttp/plugins/waz.dashboard"
 STATE_DIR="/var/run/waz.dashboard"
 GPU_PID_FILE="$STATE_DIR/gpu-sampler.pid"
-FAN_PID_FILE="$STATE_DIR/md1200-controller.pid"
 
 mkdir -p "$STATE_DIR"
 
@@ -20,10 +19,4 @@ if ! pid_matches "$GPU_PID_FILE" '/waz.dashboard/include/gpu-sampler.php'; then
   rm -f "$GPU_PID_FILE"
   nohup /usr/bin/php "$RUNTIME_DIR/include/gpu-sampler.php" >/dev/null 2>&1 &
   echo "$!" > "$GPU_PID_FILE"
-fi
-
-if ! pid_matches "$FAN_PID_FILE" '/waz.dashboard/include/md1200-controller.php'; then
-  rm -f "$FAN_PID_FILE"
-  nohup /usr/bin/php "$RUNTIME_DIR/include/md1200-controller.php" >/dev/null 2>&1 &
-  echo "$!" > "$FAN_PID_FILE"
 fi

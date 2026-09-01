@@ -17,6 +17,7 @@
 - **apcupsd or NUT:** UPS state, charge, runtime, and load
 - **intel_gpu_top:** Intel GPU engine load and client attribution
 - **lm-sensors/Linux hwmon:** CPU and cooling telemetry
+- **MD12xx Fan Control v0.4.3+:** fan health, shelf RPM, Auto/Manual mode, and header controls through its local API
 
 Missing optional integrations generally produce unavailable metrics rather than an installation failure, but layouts are tuned for the reference server.
 

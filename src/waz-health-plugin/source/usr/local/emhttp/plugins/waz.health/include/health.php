@@ -570,33 +570,8 @@ function waz_health_snapshot(): array
         'cooling' => waz_health_merge_status(waz_health_status_from_config($config, 'cooling'), waz_health_cooling_status($config)),
         'ups' => waz_health_merge_status(waz_health_status_from_config($config, 'ups'), waz_health_ups_status($config)),
     ];
-    $fans = [
-        'enabled' => false,
-        'mode' => 'auto',
-        'manualSpeed' => 20,
-        'allowedManualSpeeds' => [20, 30, 40, 50],
-        'healthState' => 'normal',
-        'message' => '',
-        'stale' => true,
-        'shelves' => [],
-    ];
-    $md1200Library = __DIR__ . '/md1200.php';
-    if (is_file($md1200Library)) {
-        require_once $md1200Library;
-        if (function_exists('waz_md1200_public_status')) {
-            $fans = waz_md1200_public_status();
-            if (($fans['enabled'] ?? false) && waz_health_state_rank((string) ($fans['healthState'] ?? 'normal')) > 0) {
-                $subsystems['cooling'] = waz_health_merge_status($subsystems['cooling'], [
-                    'label' => 'COOLING',
-                    'state' => (string) ($fans['healthState'] ?? 'attention'),
-                    'message' => trim((string) ($fans['message'] ?? 'MD1200 fan control requires attention')),
-                    'metrics' => ['md1200' => $fans],
-                ]);
-            }
-        }
-    }
     return [
-        'schemaVersion' => 2,
+        'schemaVersion' => 3,
         'pluginVersion' => '@@APP_VERSION@@',
         'server' => [
             'label' => trim((string) $config['DISPLAY_NAME']) ?: 'WAZ-SERVER',
@@ -604,7 +579,6 @@ function waz_health_snapshot(): array
         ],
         'overall' => waz_health_overall_status($config, $subsystems),
         'subsystems' => $subsystems,
-        'fans' => $fans,
         'generatedAt' => time(),
     ];
 }

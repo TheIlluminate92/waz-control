@@ -5,7 +5,7 @@
 
   var config = window.WAZHealthBootstrap || {};
   var endpoint = config.endpoint || "/plugins/waz.health/include/status.php";
-  var fanEndpoint = config.fanEndpoint || "/plugins/waz.health/include/md1200-control.php";
+  var fanEndpoint = config.fanEndpoint || "/plugins/md12xx.fancontrol/include/api.php";
   // Unraid publishes the current session token as a page-global variable.
   var csrfToken = String(window.csrf_token || config.csrfToken || "");
   var refreshMs = Math.max(3000, Number(config.refreshMs) || 5000);
@@ -15,7 +15,9 @@
     server: { label: "WAZ-SERVER", uptimeSeconds: null },
     overall: { label: "SYSTEM NORMAL", state: "normal", message: "" },
     subsystems: {},
-    fans: { enabled: false, mode: "auto", manualSpeed: 20, healthState: "normal", shelves: [] },
+    healthSubsystems: {},
+    healthOverall: { label: "SYSTEM NORMAL", state: "normal", message: "" },
+    fans: { available: false, enabled: false, mode: "auto", manualSpeed: 20, allowedManualSpeeds: [], healthState: "unknown", shelves: [] },
     uptimeSampledAt: Date.now()
   };
   var banner = null;
@@ -79,13 +81,64 @@
     if (control) control.hidden = typeof window.contentMgmt !== "function";
   }
 
+  function stateRank(value) {
+    return { unknown: 0, normal: 0, attention: 1, fault: 2 }[normalizeState(value)] || 0;
+  }
+
+  function normalizeFanStatus(payload) {
+    payload = payload && typeof payload === "object" ? payload : {};
+    var controller = payload.controller && typeof payload.controller === "object" ? payload.controller : {};
+    var watchdog = payload.watchdog && typeof payload.watchdog === "object" ? payload.watchdog : {};
+    var watchdogFault = ["restarting", "recovering", "fault"].indexOf(String(watchdog.state || "").toLowerCase()) >= 0;
+    var enabled = payload.enabled === true;
+    var healthState = !enabled ? "unknown" : (watchdogFault || payload.stale ? "fault" : normalizeState(controller.state || "normal"));
+    var message = watchdogFault
+      ? (watchdog.message || "MD12xx controller restart in progress")
+      : payload.stale
+      ? "MD12xx controller status is stale"
+      : (controller.message || "");
+    return {
+      available: true,
+      version: payload.version || "",
+      enabled: enabled,
+      mode: payload.mode === "manual" ? "manual" : "auto",
+      manualSpeed: Number(payload.manualSpeed) || 20,
+      allowedManualSpeeds: Array.isArray(payload.allowedManualSpeeds) ? payload.allowedManualSpeeds : [],
+      healthState: healthState,
+      message: message,
+      stale: payload.stale === true,
+      controller: controller,
+      watchdog: watchdog,
+      shelves: Array.isArray(payload.shelves) ? payload.shelves : []
+    };
+  }
+
+  function applyFanHealth() {
+    state.subsystems = Object.assign({}, state.healthSubsystems || {});
+    state.overall = Object.assign({}, state.healthOverall || state.overall);
+    var fans = state.fans || {};
+    if (!fans.available || !fans.enabled || stateRank(fans.healthState) === 0) return;
+    var cooling = Object.assign({ label: "COOLING", state: "unknown", message: "" }, state.subsystems.cooling || {});
+    if (stateRank(fans.healthState) > stateRank(cooling.state)) {
+      cooling.state = normalizeState(fans.healthState);
+      cooling.message = fans.message || "MD12xx fan control requires attention";
+      cooling.metrics = Object.assign({}, cooling.metrics || {}, { md12xx: fans });
+      state.subsystems.cooling = cooling;
+    }
+    if (stateRank(fans.healthState) > stateRank(state.overall.state)) {
+      state.overall.state = normalizeState(fans.healthState);
+      state.overall.label = state.overall.state === "fault" ? "FAULT" : "ATTENTION";
+      state.overall.message = fans.message || "MD12xx fan control requires attention";
+    }
+  }
+
   function setFanMode(value) {
     if (fanBusy || !state.fans.enabled) return;
     var manual = value !== "auto";
     var speed = manual ? Number(value) : Number(state.fans.manualSpeed || 20);
     var prompt = manual
-      ? "Set both MD1200 shelves to " + speed + "% manual fan speed?"
-      : "Return both MD1200 shelves to automatic temperature control?";
+      ? "Set all enabled MD12xx shelves to " + speed + "% manual fan speed?"
+      : "Return all enabled MD12xx shelves to automatic temperature control?";
     if (!window.confirm(prompt)) {
       renderFans();
       return;
@@ -93,7 +146,14 @@
 
     fanBusy = true;
     renderFans();
+    if (!csrfToken) {
+      fanBusy = false;
+      renderFans();
+      window.alert("The current Unraid session token is unavailable; reload this page and try again");
+      return;
+    }
     var body = new URLSearchParams();
+    body.set("action", "control");
     body.set("csrf_token", csrfToken);
     body.set("mode", manual ? "manual" : "auto");
     if (manual) body.set("speed", String(speed));
@@ -107,7 +167,8 @@
       .then(function (response) {
         return response.json().then(function (payload) {
           if (!response.ok) throw new Error(payload.error || "Fan control update failed");
-          state.fans = Object.assign({}, state.fans, payload);
+          state.fans = normalizeFanStatus(payload.status || payload);
+          applyFanHealth();
         });
       })
       .catch(function (error) {
@@ -124,24 +185,17 @@
     var control = document.createElement("span");
     control.className = "waz-health__fans";
     control.dataset.field = "fans";
-    control.innerHTML = '<span class="waz-health__fans-label"><span class="waz-health__dot" aria-hidden="true"></span>MD1200</span>' +
-      '<span class="waz-health__fan-readings"><span data-fan-shelf="top">TOP —</span><span data-fan-shelf="bottom">BOTTOM —</span></span>';
+    control.hidden = true;
+    control.innerHTML = '<span class="waz-health__fans-label"><span class="waz-health__dot" aria-hidden="true"></span>MD12XX</span>' +
+      '<span class="waz-health__fan-readings"></span>';
 
     var select = document.createElement("select");
     select.className = "waz-health__fan-select";
-    select.setAttribute("aria-label", "MD1200 fan control mode and manual speed");
-    [
-      ["auto", "AUTO"],
-      ["20", "MANUAL 20%"],
-      ["30", "MANUAL 30%"],
-      ["40", "MANUAL 40%"],
-      ["50", "MANUAL 50%"]
-    ].forEach(function (entry) {
-      var option = document.createElement("option");
-      option.value = entry[0];
-      option.textContent = entry[1];
-      select.appendChild(option);
-    });
+    select.setAttribute("aria-label", "MD12xx fan control mode and manual speed");
+    var automatic = document.createElement("option");
+    automatic.value = "auto";
+    automatic.textContent = "AUTO";
+    select.appendChild(automatic);
     select.addEventListener("change", function () { setFanMode(select.value); });
     control.appendChild(select);
     return control;
@@ -177,10 +231,12 @@
     });
 
     var dividerTwo = dividerOne.cloneNode(true);
+    dividerTwo.classList.add("waz-health__fan-divider");
 
     var fanControl = createFanControl();
 
     var dividerThree = dividerOne.cloneNode(true);
+    dividerThree.classList.add("waz-health__fan-divider");
 
     var meta = document.createElement("span");
     meta.className = "waz-health__meta";
@@ -321,36 +377,63 @@
     var control = banner.querySelector('[data-field="fans"]');
     if (!control) return;
     var fans = state.fans || {};
+    var available = fans.available === true;
     var enabled = fans.enabled === true;
     var mode = fans.mode === "manual" ? "manual" : "auto";
     var select = control.querySelector("select");
     var readings = control.querySelector(".waz-health__fan-readings");
+    control.hidden = !available;
+    Array.prototype.forEach.call(banner.querySelectorAll(".waz-health__fan-divider"), function (divider) {
+      divider.hidden = !available;
+    });
+    if (!available) return;
     control.dataset.state = enabled ? normalizeState(fans.healthState || "unknown") : "unknown";
     control.classList.toggle("waz-health__fans--disabled", !enabled);
     control.classList.toggle("waz-health__fans--manual", mode === "manual");
     if (select) {
+      var speeds = (Array.isArray(fans.allowedManualSpeeds) ? fans.allowedManualSpeeds : [])
+        .map(Number)
+        .filter(function (speed, index, values) { return Number.isFinite(speed) && speed >= 20 && speed <= 100 && values.indexOf(speed) === index; })
+        .sort(function (left, right) { return left - right; });
+      var signature = speeds.join(",");
+      if (select.dataset.speeds !== signature) {
+        select.replaceChildren();
+        var automatic = document.createElement("option");
+        automatic.value = "auto";
+        automatic.textContent = "AUTO";
+        select.appendChild(automatic);
+        speeds.forEach(function (speed) {
+          var option = document.createElement("option");
+          option.value = String(speed);
+          option.textContent = "MANUAL " + speed + "%";
+          select.appendChild(option);
+        });
+        select.dataset.speeds = signature;
+      }
       select.value = mode === "manual" ? String(fans.manualSpeed || 20) : "auto";
       select.disabled = !enabled || fanBusy;
-      select.title = enabled ? "Controls both MD1200 shelves" : "Controller is staged but not enabled";
+      select.title = enabled ? "Controls all enabled MD12xx shelves through the fan-control plugin" : "Enable the controller in the MD12xx Fan Control plugin";
     }
     if (readings) readings.hidden = mode !== "auto";
-
-    ["top", "bottom"].forEach(function (id) {
-      var node = control.querySelector('[data-fan-shelf="' + id + '"]');
-      if (!node) return;
-      var shelf = (fans.shelves || []).find(function (item) { return item.id === id; }) || {};
-      var rpm = Number(shelf.averageRpm);
-      node.textContent = id.toUpperCase() + " " + (Number.isFinite(rpm) && rpm > 0 ? Math.round(rpm) + " RPM" : "—");
-      node.title = [
-        shelf.name || ("MD1200 " + id),
-        shelf.temperatureC == null ? "temperature unavailable" : shelf.temperatureC + "°C from " + (shelf.temperatureSource || "assigned disks"),
-        shelf.targetPercent == null ? "target unavailable" : shelf.targetPercent + "% target",
-        shelf.telemetryMessage || "fan telemetry current"
-      ].join(" · ");
-    });
+    if (readings) {
+      readings.replaceChildren();
+      (fans.shelves || []).forEach(function (shelf, index) {
+        var node = document.createElement("span");
+        var label = String(shelf.name || shelf.model || ("SHELF " + (index + 1))).replace(/^MD12(?:00|20)\s*/i, "").trim();
+        var rpm = Number(shelf.averageRpm);
+        node.textContent = (label || ("SHELF " + (index + 1))).toUpperCase() + " " + (Number.isFinite(rpm) && rpm > 0 ? Math.round(rpm) + " RPM" : "—");
+        node.title = [
+          shelf.name || shelf.model || ("MD12xx shelf " + (index + 1)),
+          shelf.temperatureC == null ? "temperature unavailable" : shelf.temperatureC + "°C from " + (shelf.temperatureSource || "assigned disks"),
+          shelf.targetPercent == null ? "target unavailable" : shelf.targetPercent + "% target",
+          shelf.telemetryMessage || "fan telemetry current"
+        ].join(" · ");
+        readings.appendChild(node);
+      });
+    }
     control.setAttribute("aria-label", enabled
-      ? "MD1200 fan control: " + mode + (mode === "manual" ? " at " + fans.manualSpeed + " percent" : "")
-      : "MD1200 fan control is staged but disabled");
+      ? "MD12xx fan control: " + mode + (mode === "manual" ? " at " + fans.manualSpeed + " percent" : "")
+      : "MD12xx fan control is disabled");
   }
 
   function mergeSnapshot(next) {
@@ -360,19 +443,17 @@
       if (next.server.uptimeSeconds != null) state.uptimeSampledAt = Date.now();
     }
     if (next.overall && typeof next.overall === "object") {
-      state.overall = Object.assign({}, state.overall, next.overall);
+      state.healthOverall = Object.assign({}, state.healthOverall, next.overall);
     }
     if (next.subsystems && typeof next.subsystems === "object") {
-      state.subsystems = Object.assign({}, state.subsystems, next.subsystems);
+      state.healthSubsystems = Object.assign({}, next.subsystems);
     }
-    if (next.fans && typeof next.fans === "object") {
-      state.fans = Object.assign({}, state.fans, next.fans);
-    }
+    applyFanHealth();
     render();
   }
 
   function refresh() {
-    return fetch(endpoint, {
+    var healthRequest = fetch(endpoint, {
       credentials: "same-origin",
       cache: "no-store",
       headers: { Accept: "application/json" }
@@ -381,7 +462,25 @@
         if (!response.ok) throw new Error("WAZ Health endpoint returned " + response.status);
         return response.json();
       })
-      .then(function (snapshot) {
+      .then(function (snapshot) { return snapshot; });
+    var fanRequest = fetch(fanEndpoint + "?_=" + Date.now(), {
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { Accept: "application/json" }
+    })
+      .then(function (response) {
+        if (!response.ok) throw new Error("MD12xx Fan Control endpoint returned " + response.status);
+        return response.json();
+      })
+      .then(normalizeFanStatus)
+      .catch(function () {
+        return { available: false, enabled: false, mode: "auto", manualSpeed: 20, allowedManualSpeeds: [], healthState: "unknown", shelves: [] };
+      });
+
+    return Promise.all([healthRequest, fanRequest])
+      .then(function (results) {
+        var snapshot = results[0];
+        state.fans = results[1];
         mergeSnapshot(snapshot);
         if (banner) banner.dataset.connection = "online";
         return snapshot;
