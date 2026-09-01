@@ -3,7 +3,7 @@ set -eu
 
 PLUGIN_NAME="waz.dashboard.plg"
 PLUGIN_URL="https://raw.githubusercontent.com/TheIlluminate92/waz-control/main/releases/waz.dashboard.plg"
-EXPECTED_SHA256="e9784cfd7846f6858548c5e4364acbf96cf5ebad071d45c73201b6355375d1a0"
+EXPECTED_SHA256="0e9faf66a95985cbd47128eb75f6bbd28c5e8fc8e4d9b02016d98d92ac2a7edd"
 SOURCE="${1:-$PLUGIN_URL}"
 PACKAGE="/tmp/waz.dashboard-install.$$.plg"
 CONFIG_DIR="/boot/config/plugins/waz.dashboard"
@@ -75,3 +75,4 @@ fi
 
 rm -f "$CONFIG_BACKUP"
 echo "WAZ Control replacement completed successfully. Reload the Unraid WebUI."
+echo "Future releases can be installed from Plugins > Check for Updates."

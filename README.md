@@ -30,7 +30,7 @@ The Docker and Storage panels deliberately use dynamic detail windows. Selecting
 
 ## Install
 
-The current artifact is [`releases/waz.dashboard.plg`](releases/waz.dashboard.plg). Follow [docs/INSTALL.md](docs/INSTALL.md); do not treat the file as a stock one-click package.
+The current artifact is [`releases/waz.dashboard.plg`](releases/waz.dashboard.plg). Install its raw GitHub URL through Unraid's **Plugins → Install Plugin** page; later releases are delivered through the normal plugin update controls. See [docs/INSTALL.md](docs/INSTALL.md).
 
 Saved development builds and the original dashboard reference are retained for comparison. See [docs/VERSION_HISTORY.md](docs/VERSION_HISTORY.md). They are historical artifacts, not recommended installs.
 

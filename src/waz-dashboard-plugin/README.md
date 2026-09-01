@@ -62,22 +62,21 @@ From Windows PowerShell:
 
 The installable manifest is written to `dist/waz.dashboard.plg`.
 
-## Rolling install on Unraid
+## Install on Unraid
 
-Copy the built manifest to:
+In **Plugins → Install Plugin**, paste:
 
 ```text
-/boot/config/plugins/waz.dashboard.plg
+https://raw.githubusercontent.com/TheIlluminate92/waz-control/main/releases/waz.dashboard.plg
 ```
 
-Then stage it outside the plugin directory and force the local update:
+After this one-time installation, Unraid's normal **Check for Updates** and **Update** controls use the manifest's stable GitHub `pluginURL`. For a terminal replacement or recovery install:
 
 ```bash
-cp /boot/config/plugins/waz.dashboard.plg /tmp/waz.dashboard.plg
-plugin install /tmp/waz.dashboard.plg forced
+curl -fsSL https://raw.githubusercontent.com/TheIlluminate92/waz-control/main/releases/install-waz-dashboard.sh | bash
 ```
 
-Reload the Unraid Dashboard after installation. Forced updates replace only the runtime plugin files and preserve `/boot/config/plugins/waz.dashboard/waz.dashboard.cfg`.
+Reload the Unraid Dashboard after installation. Updates replace only the runtime plugin files and preserve `/boot/config/plugins/waz.dashboard/waz.dashboard.cfg`.
 
 ## Configuration
 

@@ -58,8 +58,11 @@ if ($manifestText -notmatch 'Method="remove"') {
 if ($manifestText -match 'rm -rf\s+"/boot/config/plugins/waz\.dashboard"') {
     throw 'The uninstall handler removes persistent settings, which breaks forced rolling updates.'
 }
-if ($manifestText -notmatch 'pluginURL="file:///boot/config/plugins/waz.dashboard.plg"') {
-    throw 'Manifest is missing its rolling-test pluginURL.'
+if (-not $manifestText.Contains('<!ENTITY pluginURL "https://raw.githubusercontent.com/TheIlluminate92/waz-control/main/releases/waz.dashboard.plg">') -or -not $manifestText.Contains('pluginURL="&pluginURL;"')) {
+    throw 'Manifest is missing its stable Plugin Manager update URL.'
+}
+if ($manifestText -match 'pluginURL\s+"file://' -or $manifestText -match 'pluginURL="file://') {
+    throw 'Manifest reverted to a local-only Plugin Manager URL.'
 }
 if ($manifestText -match 'setTimeout\(systemLoop,\s*100\)' -or $manifestText -match 'setInterval\([^\)]*,\s*100\)') {
     throw 'Legacy 100 ms browser polling remains.'

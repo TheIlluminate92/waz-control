@@ -3,6 +3,7 @@
 ## v0.8.0 — 2026-08-31
 
 - Added the blue dashboard wrench for Unraid's native Tile Management window.
+- Registered the stable GitHub release manifest with Unraid Plugin Manager so future releases appear as normal plugin updates.
 - Added a checksum-guarded terminal replacement installer that preserves WAZ configuration.
 - Replaced the custom MD1200 Docker controller with a host-native WAZ controller process.
 - Added compact MD1200 control to the Health header while shifting subsystem indicators left.

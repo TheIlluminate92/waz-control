@@ -10,19 +10,21 @@ WAZ Control v0.8.0 is a rolling test build for Unraid 7.2+ and is currently test
 - Review `waz.dashboard.cfg` defaults for the target hardware.
 - Leave the `MD1200-Fan-Controller` Docker container running during installation; the replacement installs disabled and will refuse serial writes while that container is active.
 
-## Download and install
+## Install as a normal Unraid plugin
 
-From the Unraid terminal:
+Open **Plugins**, select **Install Plugin**, and paste this URL:
 
-```bash
-wget -O /boot/config/plugins/waz.dashboard.plg \
-  https://raw.githubusercontent.com/TheIlluminate92/waz-control/main/releases/waz.dashboard.plg
-
-cp /boot/config/plugins/waz.dashboard.plg /tmp/waz.dashboard.plg
-plugin install /tmp/waz.dashboard.plg forced
+```text
+https://raw.githubusercontent.com/TheIlluminate92/waz-control/main/releases/waz.dashboard.plg
 ```
 
-Reload the entire Unraid WebUI after installation.
+Select **Install** and reload the entire Unraid WebUI when installation finishes.
+
+For a terminal installation or recovery replacement, run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TheIlluminate92/waz-control/main/releases/install-waz-dashboard.sh | bash
+```
 
 ## Verify
 
@@ -72,7 +74,7 @@ The commissioned BlueDress 101 EMM consoles require each `set_speed` command to 
 
 ## Updating
 
-Repeat the download, staging, and forced-install commands. Runtime files are replaced in RAM; existing `/boot/config/plugins/waz.dashboard/waz.dashboard.cfg` settings are preserved and new defaults are appended.
+Open **Plugins** and select **Check for Updates**. When a newer WAZ release build is available, use its normal **Update** button. Runtime files are replaced in RAM; existing `/boot/config/plugins/waz.dashboard/waz.dashboard.cfg` settings are preserved and new defaults are appended. The terminal installer remains available as a recovery path.
 
 ## Standalone WAZ Health migration
 

@@ -3,14 +3,16 @@
   <!ENTITY name "waz.dashboard">
   <!ENTITY author "WAZ">
   <!ENTITY version "@@RELEASE_VERSION@@">
+  <!ENTITY pluginURL "https://raw.githubusercontent.com/TheIlluminate92/waz-control/main/releases/waz.dashboard.plg">
 ]>
 
-<PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="file:///boot/config/plugins/waz.dashboard.plg" min="7.2.0" icon="fa-tachometer">
+<PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="&pluginURL;" min="7.2.0" icon="fa-tachometer">
 <CHANGES>
 ### &version; - WAZ System v@@APP_VERSION@@
 
 - Integrates the sticky WAZ Health banner, live collectors, thresholds, local time, and uptime into the dashboard plugin.
 - Adds a blue wrench to the WAZ Health header that opens Unraid's native Tile Management window.
+- Registers the stable release manifest with Unraid Plugin Manager for normal update checks and one-click updates.
 - Matches the banner to the System, Workloads, and Storage dark palette.
 - Migrates standalone WAZ Health settings and recoverably disables its old plugin manifest to prevent duplicate loaders.
 - Imports live Docker groups from FolderView Plus and Unraid's native Docker Organizer, with existing FolderView formats retained as fallbacks.
