@@ -1,0 +1,24 @@
+name: Verify standalone MD12xx plugin
+
+on:
+  push:
+    branches:
+      - feature/standalone-md12xx-plugin
+    paths:
+      - "src/md12xx-fan-control/**"
+      - ".github/workflows/verify-md12xx-plugin.yml"
+  pull_request:
+    paths:
+      - "src/md12xx-fan-control/**"
+      - ".github/workflows/verify-md12xx-plugin.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify plugin and controller fixtures
+        run: bash src/md12xx-fan-control/tests/verify.sh
