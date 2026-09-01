@@ -65,13 +65,14 @@ send_speed() {
   LOCK_FILE="/var/run/waz.dashboard/md1200-${HASH}.lock"
   (
     flock -n 9 || { echo "$SHELF serial adapter is locked by another process." >&2; exit 1; }
-    stty -F "$PORT" 38400 raw -echo -crtscts -hupcl cs8 -cstopb -parenb
-    exec 8>"$PORT"
+    stty -F "$PORT" 38400 raw -echo -crtscts -hupcl cs8 -cstopb -parenb min 0 time 1
+    exec 8<>"$PORT"
     for _ in 1 2 3 4 5; do
       # BlueDress accepts the command when terminated by carriage return only.
       printf 'set_speed %s\r' "$SPEED" >&8
       sleep 0.1
     done
+    timeout 1 cat <&8 >/dev/null 2>&1 || true
     exec 8>&-
   ) 9>"$LOCK_FILE"
   printf '%s,%s,%s\n' "$(date -Is)" "$SHELF" "$SPEED" >> "$RESULT_DIR/commands.csv"

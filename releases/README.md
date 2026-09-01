@@ -1,6 +1,6 @@
 # Current rolling release
 
-`waz.dashboard.plg` is WAZ Control v0.8.0, release build `2026.09.01.01`.
+`waz.dashboard.plg` is WAZ Control v0.8.0, release build `2026.09.01.02`.
 
 It contains the integrated Health banner, Server Status, Workloads, and Storage panels, plus the staged host-native MD1200 fan controller. The fan controller installs disabled and must not be enabled until the legacy Docker container is stopped and both shelf mappings are checked. This is a hardware-specific rolling test build, not a Community Applications release.
 

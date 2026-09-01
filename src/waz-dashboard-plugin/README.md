@@ -42,6 +42,7 @@ WAZ Dashboard is a rolling-test Unraid 7.2+ dashboard plugin. It installs matche
 - Independent Top and Bottom average RPM readouts in Auto mode
 - Hardware-confirmed 20%, 30%, 40%, and 50% Manual controls for both shelves
 - A disabled-by-default host controller that blocks writes while the legacy Docker container is running
+- Read/write BlueDress command sessions that drain the console response before relying on independent SES RPM confirmation
 - Migration snapshots in `/mnt/user/Back-Up/MD1200-Fan-Controller`
 
 When HBA Viewer is installed, WAZ System reads its authenticated `export.php` endpoint once per minute. That endpoint uses HBA Viewer's existing 60-second overview cache and controller-read lock, so WAZ does not launch an additional StorCLI scan. If HBA Viewer is absent, both HBA cells show unavailable.

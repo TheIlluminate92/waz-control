@@ -64,6 +64,7 @@
 - Replaces the MD1200 Docker controller with a host-native, disabled-by-default control loop and compact header control.
 - Shows independent Top and Bottom average fan RPM in Auto mode and offers 20/30/40/50 percent Manual control.
 - Blocks serial writes while the old Docker controller is running and distinguishes command writes from SES fan telemetry.
+- Opens BlueDress serial adapters read/write and drains each command response so temperature-driven speed changes are applied reliably.
 - Backs up the Docker configuration, template, logs, and WAZ controller state to the Back-Up share before migration.
 </CHANGES>
 

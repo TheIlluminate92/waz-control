@@ -211,6 +211,15 @@ if (-not $controlTestSource.Contains("printf 'set_speed %s\r'")) {
 if ($controllerSource.Contains('$payload = ''set_speed '' . $speed . "\r\n";') -or $controlTestSource.Contains("printf 'set_speed %s\r\n'")) {
     throw 'MD1200 CRLF command framing was reintroduced.'
 }
+if (-not $controllerSource.Contains('@fopen($port, ''r+'')') -or -not $controllerSource.Contains('stream_set_blocking($handle, false)') -or -not $controllerSource.Contains('@fread($handle')) {
+    throw 'MD1200 controller is not opening BlueDress read/write and draining its console response.'
+}
+if (-not $controlTestSource.Contains('exec 8<>"$PORT"') -or -not $controlTestSource.Contains('timeout 1 cat <&8')) {
+    throw 'MD1200 commissioning test is not draining the BlueDress console response.'
+}
+if ($controllerSource.Contains('@fopen($port, ''w'')') -or $controlTestSource.Contains('exec 8>"$PORT"')) {
+    throw 'MD1200 write-only BlueDress access was reintroduced.'
+}
 if (-not $bannerSource.Contains('window.csrf_token || config.csrfToken')) {
     throw 'MD1200 header control is not using Unraid''s current page session token.'
 }

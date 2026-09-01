@@ -17,6 +17,7 @@
 - Mapped the 24 TB Top shelf to SCSI address `0:0:18:0` and the 14 TB Bottom shelf to `0:0:11:0`, with runtime `/dev/sg*` resolution.
 - Added a guarded 20%/50% commissioning test that records per-fan RPM, restores both shelves to their normal 20% resting speed, and writes a ZIP under the `Back-Up` share.
 - Corrected BlueDress serial framing to use carriage-return-only command termination after the first test exposed that CRLF commands were not applied reliably.
+- Opened each BlueDress serial session read/write and drained its console response after hardware testing showed write-only sessions could leave `set_speed` unapplied.
 - Confirmed both primary active EMM serial paths: 50% produced approximately 6,300–6,400 RPM and restoring 20% produced approximately 3,300–3,550 RPM.
 - Fixed Dashboard Auto/Manual changes to use Unraid's current page session token and rely on Unraid's built-in POST validation.
 - Preserved Dashboard settings during forced plugin updates so controller enablement and policy survive reinstalling the staged package.

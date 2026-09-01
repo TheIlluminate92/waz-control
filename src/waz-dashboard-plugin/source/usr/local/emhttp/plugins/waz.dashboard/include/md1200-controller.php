@@ -158,12 +158,23 @@ function waz_md1200_controller_send(string $port, int $speed, bool $dryRun): arr
     try {
         $lines = [];
         $exitCode = 1;
-        $command = 'stty -F ' . escapeshellarg($port) . ' 38400 raw -echo -crtscts -hupcl cs8 -cstopb -parenb';
+        $command = 'stty -F ' . escapeshellarg($port) . ' 38400 raw -echo -crtscts -hupcl cs8 -cstopb -parenb min 0 time 1';
         @exec($command . ' 2>/dev/null', $lines, $exitCode);
         if ($exitCode !== 0) return ['state' => 'fault', 'message' => 'Unable to configure serial adapter'];
 
-        $handle = @fopen($port, 'w');
+        $handle = @fopen($port, 'r+');
         if ($handle === false) return ['state' => 'fault', 'message' => 'Unable to open serial adapter'];
+
+        // BlueDress must remain open read/write long enough for its console reply
+        // to be consumed. Write-only sessions can leave set_speed unapplied.
+        stream_set_blocking($handle, false);
+        stream_set_write_buffer($handle, 0);
+        $drainUntil = microtime(true) + 0.2;
+        while (microtime(true) < $drainUntil) {
+            @fread($handle, 4096);
+            usleep(25000);
+        }
+
         // BlueDress accepts the command when terminated by carriage return only.
         $payload = 'set_speed ' . $speed . "\r";
         for ($attempt = 0; $attempt < 5; $attempt++) {
@@ -175,8 +186,22 @@ function waz_md1200_controller_send(string $port, int $speed, bool $dryRun): arr
             }
             usleep(100000);
         }
+
+        $reply = '';
+        $replyUntil = microtime(true) + 1.0;
+        while (microtime(true) < $replyUntil && strlen($reply) < 8192) {
+            $chunk = @fread($handle, 1024);
+            if (is_string($chunk) && $chunk !== '') $reply .= $chunk;
+            usleep(25000);
+        }
         fclose($handle);
-        return ['state' => 'sent', 'message' => 'Command sent; awaiting independent fan telemetry'];
+        $acknowledged = preg_match('/set_speed\s+' . preg_quote((string) $speed, '/') . '/i', $reply) === 1;
+        return [
+            'state' => $acknowledged ? 'sent' : 'unconfirmed',
+            'message' => $acknowledged
+                ? 'Command acknowledged; awaiting independent fan telemetry'
+                : 'Command written without a console acknowledgement; independent telemetry required',
+        ];
     } finally {
         flock($lock, LOCK_UN);
         fclose($lock);
@@ -281,6 +306,9 @@ while ($running) {
 
         if ($enabled && $write['state'] === 'fault') {
             $controllerState = 'fault';
+            $messages[] = $shelf['name'] . ': ' . $write['message'];
+        } elseif ($enabled && $write['state'] === 'unconfirmed' && $controllerState !== 'fault') {
+            $controllerState = 'attention';
             $messages[] = $shelf['name'] . ': ' . $write['message'];
         } elseif ($enabled && $telemetry['state'] !== 'normal' && $controllerState !== 'fault') {
             $controllerState = 'attention';

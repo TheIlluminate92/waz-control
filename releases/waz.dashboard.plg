@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name "waz.dashboard">
   <!ENTITY author "WAZ">
-  <!ENTITY version "2026.09.01.01">
+  <!ENTITY version "2026.09.01.02">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;" pluginURL="file:///boot/config/plugins/waz.dashboard.plg" min="7.2.0" icon="fa-tachometer">
@@ -64,6 +64,7 @@
 - Replaces the MD1200 Docker controller with a host-native, disabled-by-default control loop and compact header control.
 - Shows independent Top and Bottom average fan RPM in Auto mode and offers 20/30/40/50 percent Manual control.
 - Blocks serial writes while the old Docker controller is running and distinguishes command writes from SES fan telemetry.
+- Opens BlueDress serial adapters read/write and drains each command response so temperature-driven speed changes are applied reliably.
 - Backs up the Docker configuration, template, logs, and WAZ controller state to the Back-Up share before migration.
 </CHANGES>
 
@@ -5212,12 +5213,23 @@ function waz_md1200_controller_send(string $port, int $speed, bool $dryRun): arr
     try {
         $lines = [];
         $exitCode = 1;
-        $command = 'stty -F ' . escapeshellarg($port) . ' 38400 raw -echo -crtscts -hupcl cs8 -cstopb -parenb';
+        $command = 'stty -F ' . escapeshellarg($port) . ' 38400 raw -echo -crtscts -hupcl cs8 -cstopb -parenb min 0 time 1';
         @exec($command . ' 2>/dev/null', $lines, $exitCode);
         if ($exitCode !== 0) return ['state' => 'fault', 'message' => 'Unable to configure serial adapter'];
 
-        $handle = @fopen($port, 'w');
+        $handle = @fopen($port, 'r+');
         if ($handle === false) return ['state' => 'fault', 'message' => 'Unable to open serial adapter'];
+
+        // BlueDress must remain open read/write long enough for its console reply
+        // to be consumed. Write-only sessions can leave set_speed unapplied.
+        stream_set_blocking($handle, false);
+        stream_set_write_buffer($handle, 0);
+        $drainUntil = microtime(true) + 0.2;
+        while (microtime(true) < $drainUntil) {
+            @fread($handle, 4096);
+            usleep(25000);
+        }
+
         // BlueDress accepts the command when terminated by carriage return only.
         $payload = 'set_speed ' . $speed . "\r";
         for ($attempt = 0; $attempt < 5; $attempt++) {
@@ -5229,8 +5241,22 @@ function waz_md1200_controller_send(string $port, int $speed, bool $dryRun): arr
             }
             usleep(100000);
         }
+
+        $reply = '';
+        $replyUntil = microtime(true) + 1.0;
+        while (microtime(true) < $replyUntil && strlen($reply) < 8192) {
+            $chunk = @fread($handle, 1024);
+            if (is_string($chunk) && $chunk !== '') $reply .= $chunk;
+            usleep(25000);
+        }
         fclose($handle);
-        return ['state' => 'sent', 'message' => 'Command sent; awaiting independent fan telemetry'];
+        $acknowledged = preg_match('/set_speed\s+' . preg_quote((string) $speed, '/') . '/i', $reply) === 1;
+        return [
+            'state' => $acknowledged ? 'sent' : 'unconfirmed',
+            'message' => $acknowledged
+                ? 'Command acknowledged; awaiting independent fan telemetry'
+                : 'Command written without a console acknowledgement; independent telemetry required',
+        ];
     } finally {
         flock($lock, LOCK_UN);
         fclose($lock);
@@ -5335,6 +5361,9 @@ while ($running) {
 
         if ($enabled && $write['state'] === 'fault') {
             $controllerState = 'fault';
+            $messages[] = $shelf['name'] . ': ' . $write['message'];
+        } elseif ($enabled && $write['state'] === 'unconfirmed' && $controllerState !== 'fault') {
+            $controllerState = 'attention';
             $messages[] = $shelf['name'] . ': ' . $write['message'];
         } elseif ($enabled && $telemetry['state'] !== 'normal' && $controllerState !== 'fault') {
             $controllerState = 'attention';
@@ -7752,13 +7781,14 @@ send_speed() {
   LOCK_FILE="/var/run/waz.dashboard/md1200-${HASH}.lock"
   (
     flock -n 9 || { echo "$SHELF serial adapter is locked by another process." >&2; exit 1; }
-    stty -F "$PORT" 38400 raw -echo -crtscts -hupcl cs8 -cstopb -parenb
-    exec 8>"$PORT"
+    stty -F "$PORT" 38400 raw -echo -crtscts -hupcl cs8 -cstopb -parenb min 0 time 1
+    exec 8<>"$PORT"
     for _ in 1 2 3 4 5; do
       # BlueDress accepts the command when terminated by carriage return only.
       printf 'set_speed %s\r' "$SPEED" >&8
       sleep 0.1
     done
+    timeout 1 cat <&8 >/dev/null 2>&1 || true
     exec 8>&-
   ) 9>"$LOCK_FILE"
   printf '%s,%s,%s\n' "$(date -Is)" "$SHELF" "$SPEED" >> "$RESULT_DIR/commands.csv"
